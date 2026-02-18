@@ -1,0 +1,32 @@
+use soroban_sdk::{Env, Address, String, contracttype};
+use crate::types::OracleConfig;
+
+#[contracttype]
+pub enum OracleData {
+    Result(u64, u32), // market_id -> outcome
+    LastUpdate(u64, u64), // market_id -> timestamp
+}
+
+pub fn get_oracle_result(e: &Env, market_id: u64, config: &OracleConfig) -> Option<u32> {
+    // In a real implementation, this would call the external oracle contract (Reflector/Pyth)
+    // using config.oracle_address and config.feed_id.
+    // For this replication, we use a storage-backed mock-ready structure.
+    e.storage().persistent().get(&OracleData::Result(market_id, 0)) // Note: 0 is dummy key part
+}
+
+pub fn set_oracle_result(e: &Env, market_id: u64, outcome: u32) {
+    // Mock oracle result for testing/demonstration
+    e.storage().persistent().set(&OracleData::Result(market_id, 0), &outcome);
+    e.storage().persistent().set(&OracleData::LastUpdate(market_id, 0), &e.ledger().timestamp());
+    
+    e.events().publish(
+        (String::from_str(e, "oracle_update"), market_id),
+        outcome,
+    );
+}
+
+pub fn verify_oracle_health(e: &Env, config: &OracleConfig) -> bool {
+    // Check if oracle address is valid and responding (contract check)
+    // For now, assume healthy if configured
+    !config.feed_id.is_empty()
+}
