@@ -5,6 +5,8 @@ mod types;
 mod errors;
 mod modules;
 mod test;
+mod test_snapshot_voting;
+mod test_resolution_state_machine;
 
 use crate::types::{ConfigKey, CircuitBreakerState};
 use crate::modules::admin;
@@ -61,6 +63,15 @@ impl PredictIQ {
         crate::modules::bets::place_bet(&e, bettor, market_id, outcome, amount, token_address)
     }
 
+    pub fn claim_winnings(
+        e: Env,
+        bettor: Address,
+        market_id: u64,
+        token_address: Address,
+    ) -> Result<i128, ErrorCode> {
+        crate::modules::bets::claim_winnings(&e, bettor, market_id, token_address)
+    }
+
     pub fn get_market(e: Env, id: u64) -> Option<crate::types::Market> {
         crate::modules::markets::get_market(&e, id)
     }
@@ -92,39 +103,34 @@ impl PredictIQ {
         crate::modules::oracles::set_oracle_result(&e, market_id, outcome)
     }
 
-    pub fn resolve_with_oracle(e: Env, market_id: u64) -> Result<(), ErrorCode> {
-        crate::modules::circuit_breaker::require_closed(&e)?;
-        
-        let mut market = crate::modules::markets::get_market(&e, market_id)
-            .ok_or(ErrorCode::MarketNotFound)?;
-        
-        if market.status != crate::types::MarketStatus::PendingResolution {
-            return Err(ErrorCode::MarketNotPendingResolution);
-        }
-        
-        // Fetch and validate Pyth price
-        let outcome = match crate::modules::oracles::resolve_with_pyth(&e, market_id, &market.oracle_config) {
-            Ok(outcome) => outcome,
-            Err(ErrorCode::StalePrice) | Err(ErrorCode::ConfidenceTooLow) => {
-                // Mark as disputed if price validation fails
-                market.status = crate::types::MarketStatus::Disputed;
-                e.storage().persistent().set(&market_id, &market);
-                return Err(ErrorCode::OracleFailure);
-            }
-            Err(e) => return Err(e),
-        };
-        
-        // Auto-resolve market
-        market.status = crate::types::MarketStatus::Resolved;
-        market.winning_outcome = Some(outcome);
-        e.storage().persistent().set(&market_id, &market);
-        
-        Ok(())
+    pub fn resolve_market(e: Env, market_id: u64, winning_outcome: u32) -> Result<(), ErrorCode> {
+        crate::modules::admin::require_admin(&e)?;
+        crate::modules::disputes::resolve_market(&e, market_id, winning_outcome)
     }
 
     pub fn reset_monitoring(e: Env) -> Result<(), ErrorCode> {
         crate::modules::admin::require_admin(&e)?;
         crate::modules::monitoring::reset_monitoring(&e);
         Ok(())
+    }
+
+    pub fn set_governance_token(e: Env, token: Address) -> Result<(), ErrorCode> {
+        crate::modules::admin::require_admin(&e)?;
+        e.storage().instance().set(&ConfigKey::GovernanceToken, &token);
+        Ok(())
+    }
+
+    pub fn unlock_tokens(e: Env, voter: Address, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::voting::unlock_tokens(&e, voter, market_id)
+    }
+
+    pub fn attempt_oracle_resolution(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::circuit_breaker::require_closed(&e)?;
+        crate::modules::resolution::attempt_oracle_resolution(&e, market_id)
+    }
+
+    pub fn finalize_resolution(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::circuit_breaker::require_closed(&e)?;
+        crate::modules::resolution::finalize_resolution(&e, market_id)
     }
 }
