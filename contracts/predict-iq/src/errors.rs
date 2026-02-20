@@ -25,4 +25,6 @@ pub enum ErrorCode {
     MarketNotDisputed = 118,
     MarketNotPendingResolution = 119,
     AdminNotSet = 120,
+    StalePrice = 121,
+    ConfidenceTooLow = 122,
 }

@@ -92,6 +92,36 @@ impl PredictIQ {
         crate::modules::oracles::set_oracle_result(&e, market_id, outcome)
     }
 
+    pub fn resolve_with_oracle(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::circuit_breaker::require_closed(&e)?;
+        
+        let mut market = crate::modules::markets::get_market(&e, market_id)
+            .ok_or(ErrorCode::MarketNotFound)?;
+        
+        if market.status != crate::types::MarketStatus::PendingResolution {
+            return Err(ErrorCode::MarketNotPendingResolution);
+        }
+        
+        // Fetch and validate Pyth price
+        let outcome = match crate::modules::oracles::resolve_with_pyth(&e, market_id, &market.oracle_config) {
+            Ok(outcome) => outcome,
+            Err(ErrorCode::StalePrice) | Err(ErrorCode::ConfidenceTooLow) => {
+                // Mark as disputed if price validation fails
+                market.status = crate::types::MarketStatus::Disputed;
+                e.storage().persistent().set(&market_id, &market);
+                return Err(ErrorCode::OracleFailure);
+            }
+            Err(e) => return Err(e),
+        };
+        
+        // Auto-resolve market
+        market.status = crate::types::MarketStatus::Resolved;
+        market.winning_outcome = Some(outcome);
+        e.storage().persistent().set(&market_id, &market);
+        
+        Ok(())
+    }
+
     pub fn reset_monitoring(e: Env) -> Result<(), ErrorCode> {
         crate::modules::admin::require_admin(&e)?;
         crate::modules::monitoring::reset_monitoring(&e);
