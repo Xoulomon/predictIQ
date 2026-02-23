@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod amm;
 pub mod markets;
 pub mod bets;
 pub mod voting;

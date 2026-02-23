@@ -5,6 +5,7 @@ pub mod types;
 mod errors;
 mod modules;
 mod test;
+mod test_amm;
 
 use crate::types::{ConfigKey, CircuitBreakerState};
 use crate::modules::admin;
@@ -221,5 +222,74 @@ impl PredictIQ {
 
     pub fn is_timelock_satisfied(e: Env) -> Result<bool, ErrorCode> {
         crate::modules::governance::is_timelock_satisfied(&e)
+    }
+
+    // AMM Functions
+    pub fn initialize_amm_pools(e: Env, market_id: u64, num_outcomes: u32, initial_usdc: i128) -> Result<(), ErrorCode> {
+        crate::modules::admin::require_admin(&e)?;
+        crate::modules::amm::initialize_pools(&e, market_id, num_outcomes, initial_usdc);
+        Ok(())
+    }
+
+    pub fn buy_shares(
+        e: Env,
+        buyer: Address,
+        market_id: u64,
+        outcome: u32,
+        usdc_in: i128,
+        token_address: Address,
+    ) -> Result<(i128, i128), ErrorCode> {
+        buyer.require_auth();
+        crate::modules::circuit_breaker::require_not_paused_for_high_risk(&e)?;
+        
+        // Transfer USDC from buyer to contract
+        let client = soroban_sdk::token::Client::new(&e, &token_address);
+        client.transfer(&buyer, &e.current_contract_address(), &usdc_in);
+        
+        crate::modules::amm::buy_shares(&e, market_id, buyer, outcome, usdc_in)
+    }
+
+    pub fn sell_shares(
+        e: Env,
+        seller: Address,
+        market_id: u64,
+        outcome: u32,
+        shares_in: i128,
+        token_address: Address,
+    ) -> Result<(i128, i128), ErrorCode> {
+        seller.require_auth();
+        crate::modules::circuit_breaker::require_not_paused_for_high_risk(&e)?;
+        
+        let (usdc_out, price) = crate::modules::amm::sell_shares(&e, market_id, seller.clone(), outcome, shares_in)?;
+        
+        // Transfer USDC from contract to seller
+        let client = soroban_sdk::token::Client::new(&e, &token_address);
+        client.transfer(&e.current_contract_address(), &seller, &usdc_out);
+        
+        Ok((usdc_out, price))
+    }
+
+    pub fn get_buy_price(e: Env, market_id: u64, outcome: u32) -> i128 {
+        crate::modules::amm::get_buy_price(&e, market_id, outcome).unwrap_or(0)
+    }
+
+    pub fn get_user_shares(e: Env, market_id: u64, user: Address, outcome: u32) -> i128 {
+        crate::modules::amm::get_user_shares(&e, market_id, user, outcome)
+    }
+
+    pub fn get_amm_pool(e: Env, market_id: u64, outcome: u32) -> Option<crate::modules::amm::AMMPool> {
+        crate::modules::amm::get_pool(&e, market_id, outcome)
+    }
+
+    pub fn quote_buy(e: Env, market_id: u64, outcome: u32, usdc_in: i128) -> i128 {
+        crate::modules::amm::quote_buy(&e, market_id, outcome, usdc_in).unwrap_or(0)
+    }
+
+    pub fn quote_sell(e: Env, market_id: u64, outcome: u32, shares_in: i128) -> i128 {
+        crate::modules::amm::quote_sell(&e, market_id, outcome, shares_in).unwrap_or(0)
+    }
+
+    pub fn verify_pool_invariant(e: Env, market_id: u64, outcome: u32) -> bool {
+        crate::modules::amm::verify_invariant(&e, market_id, outcome).unwrap_or(false)
     }
 }
