@@ -13,6 +13,7 @@ mod test_cancellation;
 mod test_referral;
 mod mock_identity;
 mod test_identity;
+mod test_security;
 
 use crate::types::{ConfigKey, CircuitBreakerState};
 use crate::modules::admin;
