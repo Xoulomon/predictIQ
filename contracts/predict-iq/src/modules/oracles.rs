@@ -29,7 +29,7 @@ pub fn validate_price(e: &Env, price: &PythPrice, config: &OracleConfig) -> Resu
     
     // Check freshness
     if age > config.max_staleness_seconds as i64 {
-        return Err(ErrorCode::StalePrice);
+        return Err(ErrorCode::OracleFailure);
     }
     
     // Check confidence: conf should be < max_confidence_bps% of price
@@ -37,7 +37,7 @@ pub fn validate_price(e: &Env, price: &PythPrice, config: &OracleConfig) -> Resu
     let max_conf = (price_abs * config.max_confidence_bps) / 10000;
     
     if price.conf > max_conf {
-        return Err(ErrorCode::ConfidenceTooLow);
+        return Err(ErrorCode::OracleFailure);
     }
     
     Ok(())
