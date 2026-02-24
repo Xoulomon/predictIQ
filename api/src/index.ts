@@ -2,15 +2,16 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import pinoHttp from 'pino-http';
 import { config } from './config';
+import { connectDatabase } from './config/database';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { rateLimiter } from './middleware/rateLimiter';
 import healthRoutes from './routes/health';
-import authRoutes from './routes/auth';
-import contentRoutes from './routes/content';
+import landingRoutes from './routes/landing';
 
 const app: Application = express();
 
+// Middleware
 app.use(cors({ origin: config.cors.origin, credentials: true }));
 app.use(express.json());
 app.use(pinoHttp({ logger }));

@@ -3,7 +3,7 @@ import { pool } from '../config/database';
 
 const router = Router();
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/health', async (req: Request, res: Response) => {
   try {
     await pool.query('SELECT 1');
     res.json({

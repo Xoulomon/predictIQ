@@ -16,11 +16,4 @@ export const config = {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
   },
-  jwt: {
-    secret: process.env.JWT_SECRET || 'your-secret-key',
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-  },
-  cache: {
-    ttl: parseInt(process.env.CACHE_TTL || '300', 10),
-  },
 };

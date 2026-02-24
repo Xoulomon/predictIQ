@@ -1,254 +1,161 @@
-# PredictIQ CMS API
+# PredictIQ Landing Page API
 
-Content Management System API for PredictIQ landing page.
+Backend API service for PredictIQ landing page.
 
 ## Features
 
-- ✅ Dynamic content management
-- ✅ Version control for content changes
-- ✅ JWT authentication for admin endpoints
-- ✅ Content validation
-- ✅ Caching for performance
-- ✅ Markdown support
-- ✅ Audit logging
-- ✅ Content preview
+- ✅ Express.js with TypeScript
+- ✅ PostgreSQL database connection
+- ✅ API versioning (`/api/v1`)
+- ✅ Pino logging
+- ✅ CORS configuration
+- ✅ Error handling middleware
+- ✅ Rate limiting
+- ✅ Health check endpoint
+- ✅ Docker support
 
 ## Quick Start
 
+### Local Development
+
+1. **Install dependencies:**
 ```bash
 npm install
+```
+
+2. **Set up environment:**
+```bash
 cp .env.example .env
+# Edit .env with your configuration
+```
+
+3. **Start PostgreSQL:**
+```bash
 docker-compose up db -d
+```
+
+4. **Run development server:**
+```bash
 npm run dev
+```
+
+Server runs on `http://localhost:3000`
+
+### Docker Deployment
+
+```bash
+docker-compose up -d
 ```
 
 ## API Endpoints
 
-### Public Endpoints
-
-#### Get Content
+### Health Check
 ```
-GET /api/v1/content/:section
-```
-
-Example:
-```bash
-curl http://localhost:3000/api/v1/content/hero
+GET /health
 ```
 
 Response:
 ```json
 {
-  "section": "hero",
-  "headline": "Welcome to PredictIQ",
-  "subheadline": "Decentralized prediction markets",
-  "ctaPrimary": "Get Started",
-  "ctaSecondary": "Learn More",
-  "version": 1,
-  "lastUpdated": "2026-02-24T07:54:36.334Z"
+  "status": "ok",
+  "timestamp": "2026-02-24T07:34:17.144Z",
+  "database": "connected"
 }
 ```
 
-### Admin Endpoints (Requires Authentication)
-
-#### Login
+### Newsletter Signup
 ```
-POST /api/v1/auth/login
+POST /api/v1/newsletter
 Content-Type: application/json
 
 {
-  "email": "admin@predictiq.com",
-  "password": "admin123"
+  "email": "user@example.com"
 }
+```
+
+### Analytics
+```
+GET /api/v1/analytics
 ```
 
 Response:
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": 1,
-    "email": "admin@predictiq.com"
+  "status": "success",
+  "data": {
+    "totalSignups": 42
   }
 }
 ```
 
-#### Update Content
-```
-POST /api/v1/content/:section
-Authorization: Bearer <token>
-Content-Type: application/json
+## Configuration
 
-{
-  "headline": "New Headline",
-  "subheadline": "New Subheadline",
-  "ctaPrimary": "Start Now",
-  "ctaSecondary": "Explore"
-}
+Environment variables (see `.env.example`):
+
+- `NODE_ENV` - Environment (development/production)
+- `PORT` - Server port (default: 3000)
+- `DATABASE_URL` - PostgreSQL connection string
+- `CORS_ORIGIN` - Allowed CORS origin
+- `RATE_LIMIT_WINDOW_MS` - Rate limit window (default: 15 min)
+- `RATE_LIMIT_MAX_REQUESTS` - Max requests per window (default: 100)
+
+## Scripts
+
+- `npm run dev` - Start development server with hot reload
+- `npm run build` - Build TypeScript to JavaScript
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
+
+## Project Structure
+
+```
+api/
+├── src/
+│   ├── config/          # Configuration files
+│   │   ├── index.ts     # Main config
+│   │   └── database.ts  # Database connection
+│   ├── middleware/      # Express middleware
+│   │   ├── errorHandler.ts
+│   │   └── rateLimiter.ts
+│   ├── routes/          # API routes
+│   │   ├── health.ts
+│   │   └── landing.ts
+│   ├── utils/           # Utilities
+│   │   └── logger.ts
+│   └── index.ts         # Application entry point
+├── Dockerfile
+├── docker-compose.yml
+├── init.sql             # Database schema
+└── package.json
 ```
 
-#### Get Version History
-```
-GET /api/v1/content/:section/versions?limit=10
-Authorization: Bearer <token>
-```
+## Rate Limiting
 
-#### Get Specific Version
-```
-GET /api/v1/content/:section/versions/:version
-Authorization: Bearer <token>
-```
+Default: 100 requests per 15 minutes per IP address.
 
-#### Preview Content
-```
-POST /api/v1/content/:section/preview
-Authorization: Bearer <token>
-Content-Type: application/json
+## Error Handling
 
-{
-  "headline": "**Bold** headline with markdown"
-}
-```
-
-## Content Sections
-
-### Hero
+All errors return JSON:
 ```json
 {
-  "headline": "string",
-  "subheadline": "string",
-  "ctaPrimary": "string",
-  "ctaSecondary": "string"
+  "status": "error",
+  "message": "Error description"
 }
 ```
 
-### Features
-```json
-{
-  "items": [
-    {
-      "title": "string",
-      "description": "string"
-    }
-  ]
-}
-```
+## Logging
 
-### FAQ
-```json
-{
-  "items": [
-    {
-      "question": "string",
-      "answer": "string"
-    }
-  ]
-}
-```
-
-### Testimonials
-```json
-{
-  "items": [
-    {
-      "name": "string",
-      "role": "string",
-      "content": "string",
-      "avatar": "string"
-    }
-  ]
-}
-```
-
-### Announcements
-```json
-{
-  "message": "string",
-  "type": "info|warning|success"
-}
-```
-
-## Environment Variables
-
-```env
-NODE_ENV=development
-PORT=3000
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/predictiq
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=24h
-CACHE_TTL=300
-CORS_ORIGIN=http://localhost:3001
-```
-
-## Testing
-
-```bash
-# Login
-TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@predictiq.com","password":"admin123"}' \
-  | jq -r '.token')
-
-# Get content
-curl http://localhost:3000/api/v1/content/hero
-
-# Update content
-curl -X POST http://localhost:3000/api/v1/content/hero \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"headline":"Updated","subheadline":"New text","ctaPrimary":"Go","ctaSecondary":"Learn"}'
-
-# Get versions
-curl http://localhost:3000/api/v1/content/hero/versions \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Features
-
-### Version Control
-- Every content update creates a new version
-- Old versions are preserved
-- Version history accessible via API
-
-### Caching
-- Content cached for 5 minutes (configurable)
-- Cache invalidated on updates
-- Improves read performance
-
-### Validation
-- Content validated against section schemas
-- Required fields enforced
-- Prevents invalid content
-
-### Audit Log
-- All changes logged with user and timestamp
-- Audit trail for compliance
-
-### Markdown Support
-- Markdown automatically rendered in preview
-- Supports **bold**, *italic*, links, etc.
+Uses Pino for structured logging. Logs include:
+- HTTP requests/responses
+- Database queries
+- Errors and warnings
 
 ## Database Schema
 
-```sql
-users (id, email, password_hash, is_admin)
-content (id, section, content, version, created_by, is_active)
-content_audit_log (id, section, version, action, user_id)
-```
-
-## Security
-
-- JWT authentication for admin endpoints
-- Bcrypt password hashing
-- Rate limiting
-- CORS protection
-- Input validation
-
-## Performance
-
-- In-memory caching (node-cache)
-- Database indexes on frequently queried fields
-- Efficient version queries
+### newsletter_signups
+- `id` - Serial primary key
+- `email` - Unique email address
+- `created_at` - Timestamp
 
 ## License
 
