@@ -238,56 +238,17 @@ pub fn withdraw_refund(
     Ok(refund_amount)
 }
 
-/// Get the accumulated remainder for a market
-pub fn get_market_remainder(e: &Env, market_id: u64) -> i128 {
+pub fn get_minimum_bet_amount(e: &Env) -> i128 {
     e.storage()
         .persistent()
-        .get(&DataKey::MarketRemainder(market_id))
-        .unwrap_or(0)
+        .get(&crate::types::ConfigKey::MinimumBetAmount)
+        .unwrap_or(1_000_000) // Default: 0.1 XLM (1,000,000 stroops) or equivalent
 }
 
-/// Collect unclaimed remainder to fee treasury after market is resolved
-/// Can only be called by admin after a grace period
-pub fn collect_market_remainder(
-    e: &Env,
-    market_id: u64,
-    token_address: Address,
-) -> Result<i128, ErrorCode> {
+pub fn set_minimum_bet_amount(e: &Env, amount: i128) -> Result<(), ErrorCode> {
     crate::modules::admin::require_admin(e)?;
-    
-    let market = markets::get_market(e, market_id).ok_or(ErrorCode::MarketNotFound)?;
-    
-    // Market must be resolved
-    if market.status != crate::types::MarketStatus::Resolved {
-        return Err(ErrorCode::MarketNotActive);
-    }
-    
-    // Check if sufficient time has passed (e.g., 30 days)
-    let resolved_at = market.resolved_at.ok_or(ErrorCode::MarketNotActive)?;
-    let grace_period = 30 * 24 * 60 * 60; // 30 days in seconds
-    if e.ledger().timestamp() < resolved_at + grace_period {
-        return Err(ErrorCode::MarketStillActive);
-    }
-    
-    let remainder_key = DataKey::MarketRemainder(market_id);
-    let remainder: i128 = e
-        .storage()
+    e.storage()
         .persistent()
-        .get(&remainder_key)
-        .unwrap_or(0);
-    
-    if remainder == 0 {
-        return Err(ErrorCode::InsufficientBalance);
-    }
-    
-    // Transfer remainder to fee treasury
-    crate::modules::fees::collect_fee(e, token_address.clone(), remainder);
-    
-    let client = token::Client::new(e, &token_address);
-    client.transfer(&e.current_contract_address(), &crate::modules::admin::get_fee_admin(e)?, &remainder);
-    
-    // Clear the remainder
-    e.storage().persistent().set(&remainder_key, &0);
-    
-    Ok(remainder)
+        .set(&crate::types::ConfigKey::MinimumBetAmount, &amount);
+    Ok(())
 }

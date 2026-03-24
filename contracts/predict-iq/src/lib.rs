@@ -266,17 +266,13 @@ impl PredictIQ {
         crate::modules::markets::prune_market(&e, market_id)
     }
 
-    /// Get accumulated remainder for a market from parimutuel rounding
-    pub fn get_market_remainder(e: Env, market_id: u64) -> i128 {
-        crate::modules::bets::get_market_remainder(&e, market_id)
+    /// Get the minimum bet amount threshold
+    pub fn get_minimum_bet_amount(e: Env) -> i128 {
+        crate::modules::bets::get_minimum_bet_amount(&e)
     }
 
-    /// Collect unclaimed remainder to treasury after grace period (admin only)
-    pub fn collect_market_remainder(
-        e: Env,
-        market_id: u64,
-        token_address: Address,
-    ) -> Result<i128, ErrorCode> {
-        crate::modules::bets::collect_market_remainder(&e, market_id, token_address)
+    /// Set the minimum bet amount threshold (admin only)
+    pub fn set_minimum_bet_amount(e: Env, amount: i128) -> Result<(), ErrorCode> {
+        crate::modules::bets::set_minimum_bet_amount(&e, amount)
     }
 }
