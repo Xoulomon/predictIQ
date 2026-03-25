@@ -236,6 +236,48 @@ fn test_tiered_commission_rates() {
 }
 
 #[test]
+fn test_admin_can_reduce_push_threshold_for_gas_intensive_tokens() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+    client.set_creation_deposit(&0);
+
+    let creator = Address::generate(&e);
+    let native_token = Address::generate(&e);
+
+    // Baseline: estimated_winners = 20 (tally=2000, avg bet proxy=100), default threshold=50.
+    let market_default = create_test_market(
+        &client,
+        &e,
+        &creator,
+        types::MarketTier::Basic,
+        &native_token,
+    );
+    e.storage()
+        .persistent()
+        .set(&crate::modules::voting::DataKey::VoteTally(market_default, 0), &2000i128);
+    client.resolve_market(&market_default, &0);
+    let resolved_default = client.get_market(&market_default).unwrap();
+    assert_eq!(resolved_default.payout_mode, types::PayoutMode::Push);
+
+    // Admin lowers threshold to make the same winner estimate switch to Pull.
+    client.set_max_push_payout_winners(&10);
+    assert_eq!(client.get_max_push_payout_winners(), 10);
+
+    let market_lowered = create_test_market(
+        &client,
+        &e,
+        &creator,
+        types::MarketTier::Basic,
+        &native_token,
+    );
+    e.storage()
+        .persistent()
+        .set(&crate::modules::voting::DataKey::VoteTally(market_lowered, 0), &2000i128);
+    client.resolve_market(&market_lowered, &0);
+    let resolved_lowered = client.get_market(&market_lowered).unwrap();
+    assert_eq!(resolved_lowered.payout_mode, types::PayoutMode::Pull);
+}
+
+#[test]
 fn test_reputation_management() {
     let (e, _admin, _contract_id, client) = setup_test_env();
 

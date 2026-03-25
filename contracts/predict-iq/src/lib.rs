@@ -188,6 +188,14 @@ impl PredictIQ {
         crate::modules::disputes::get_resolution_metrics(&e, market_id, outcome)
     }
 
+    pub fn set_max_push_payout_winners(e: Env, threshold: u32) -> Result<(), ErrorCode> {
+        crate::modules::disputes::set_max_push_payout_winners(&e, threshold)
+    }
+
+    pub fn get_max_push_payout_winners(e: Env) -> u32 {
+        crate::modules::disputes::get_max_push_payout_winners(&e)
+    }
+
     pub fn set_creator_reputation(
         e: Env,
         creator: Address,
