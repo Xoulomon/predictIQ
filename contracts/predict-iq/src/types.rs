@@ -53,11 +53,8 @@ pub enum MarketTier {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CreatorReputation {
-    None,
-    Basic,
-    Pro,
-    Institutional,
+pub struct CreatorReputation {
+    pub score: u32, // Reputation score (0-1000+)
 }
 
 #[contracttype]

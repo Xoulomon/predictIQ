@@ -73,24 +73,23 @@ pub fn create_market(
     }
 
     let reputation = get_creator_reputation(e, &creator);
-    let creation_deposit = get_creation_deposit(e);
+    let base_deposit = get_creation_deposit(e);
 
-    // Check if deposit is required based on reputation
-    let deposit_required = !matches!(
-        reputation,
-        CreatorReputation::Pro | CreatorReputation::Institutional
-    );
+    // Calculate deposit with linear reputation discount
+    // 100 reputation points = 10% discount (max 90% discount at 900+ points)
+    let discount_percent = (reputation.score / 100).min(90) as i128;
+    let adjusted_deposit = (base_deposit * (100 - discount_percent)) / 100;
 
-    if deposit_required && creation_deposit > 0 {
+    if adjusted_deposit > 0 {
         let token_client = token::Client::new(e, &native_token);
         let balance = token_client.balance(&creator);
 
-        if balance < creation_deposit {
+        if balance < adjusted_deposit {
             return Err(ErrorCode::InsufficientDeposit);
         }
 
         // Lock deposit
-        token_client.transfer(&creator, &e.current_contract_address(), &creation_deposit);
+        token_client.transfer(&creator, &e.current_contract_address(), &adjusted_deposit);
     }
 
     let mut count: u64 = e
@@ -121,11 +120,7 @@ pub fn create_market(
         total_staked: 0,
         payout_mode: crate::types::PayoutMode::Pull,
         tier,
-        creation_deposit: if deposit_required {
-            creation_deposit
-        } else {
-            0
-        },
+        creation_deposit: adjusted_deposit,
         parent_id,
         parent_outcome_idx,
         resolved_at: None,
@@ -199,7 +194,7 @@ pub fn get_creator_reputation(e: &Env, creator: &Address) -> CreatorReputation {
     e.storage()
         .persistent()
         .get(&DataKey::CreatorReputation(creator.clone()))
-        .unwrap_or(CreatorReputation::None)
+        .unwrap_or(CreatorReputation { score: 0 })
 }
 
 pub fn set_creator_reputation(
