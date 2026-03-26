@@ -963,6 +963,165 @@ fn test_persistent_state_preserved_on_upgrade() {
     assert_eq!(stored_admin, admin);
 }
 
+#[test]
+fn test_same_hash_cannot_be_reinitiated_while_pending() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+
+    let guardian = Address::generate(&e);
+    let mut guardians = Vec::new(&e);
+    guardians.push_back(types::Guardian {
+        address: guardian,
+        voting_power: 1,
+    });
+    client.initialize_guardians(&guardians);
+
+    let wasm_hash = String::from_str(&e, "repeat_hash");
+    e.ledger().with_mut(|li| li.timestamp = 1000);
+
+    client.initiate_upgrade(&wasm_hash);
+
+    let result = client.try_initiate_upgrade(&wasm_hash);
+    assert_eq!(result, Err(Ok(ErrorCode::UpgradeAlreadyPending)));
+}
+
+#[test]
+fn test_different_hash_still_blocked_while_another_upgrade_is_pending() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+
+    let guardian = Address::generate(&e);
+    let mut guardians = Vec::new(&e);
+    guardians.push_back(types::Guardian {
+        address: guardian,
+        voting_power: 1,
+    });
+    client.initialize_guardians(&guardians);
+
+    let hash_a = String::from_str(&e, "hash_a");
+    let hash_b = String::from_str(&e, "hash_b");
+    e.ledger().with_mut(|li| li.timestamp = 1000);
+
+    client.initiate_upgrade(&hash_a);
+
+    let result = client.try_initiate_upgrade(&hash_b);
+    assert_eq!(result, Err(Ok(ErrorCode::NotAuthorized)));
+}
+
+#[test]
+fn test_rejected_hash_blocked_during_cooldown() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+
+    let guardian1 = Address::generate(&e);
+    let guardian2 = Address::generate(&e);
+    let guardian3 = Address::generate(&e);
+    let mut guardians = Vec::new(&e);
+    guardians.push_back(types::Guardian {
+        address: guardian1.clone(),
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian2,
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian3,
+        voting_power: 1,
+    });
+    client.initialize_guardians(&guardians);
+
+    let wasm_hash = String::from_str(&e, "cooldown_hash");
+    e.ledger().with_mut(|li| li.timestamp = 1000);
+    client.initiate_upgrade(&wasm_hash);
+    client.vote_for_upgrade(&guardian1, &true);
+
+    e.ledger()
+        .with_mut(|li| li.timestamp = 1000 + types::TIMELOCK_DURATION + 1);
+    let execute_result = client.try_execute_upgrade();
+    assert_eq!(execute_result, Err(Ok(ErrorCode::InsufficientVotes)));
+
+    let result = client.try_initiate_upgrade(&wasm_hash);
+    assert_eq!(result, Err(Ok(ErrorCode::UpgradeHashInCooldown)));
+}
+
+#[test]
+fn test_rejected_hash_allowed_after_cooldown_expires() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+
+    let guardian1 = Address::generate(&e);
+    let guardian2 = Address::generate(&e);
+    let guardian3 = Address::generate(&e);
+    let mut guardians = Vec::new(&e);
+    guardians.push_back(types::Guardian {
+        address: guardian1.clone(),
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian2,
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian3,
+        voting_power: 1,
+    });
+    client.initialize_guardians(&guardians);
+
+    let wasm_hash = String::from_str(&e, "reinit_hash");
+    e.ledger().with_mut(|li| li.timestamp = 1000);
+    client.initiate_upgrade(&wasm_hash);
+    client.vote_for_upgrade(&guardian1, &true);
+
+    e.ledger()
+        .with_mut(|li| li.timestamp = 1000 + types::TIMELOCK_DURATION + 1);
+    let execute_result = client.try_execute_upgrade();
+    assert_eq!(execute_result, Err(Ok(ErrorCode::InsufficientVotes)));
+
+    e.ledger().with_mut(|li| {
+        li.timestamp = 1000 + types::TIMELOCK_DURATION + 1 + types::UPGRADE_COOLDOWN_DURATION + 1
+    });
+
+    let result = client.try_initiate_upgrade(&wasm_hash);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_rejected_hash_still_blocked_at_exact_cooldown_boundary() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+
+    let guardian1 = Address::generate(&e);
+    let guardian2 = Address::generate(&e);
+    let guardian3 = Address::generate(&e);
+    let mut guardians = Vec::new(&e);
+    guardians.push_back(types::Guardian {
+        address: guardian1.clone(),
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian2,
+        voting_power: 1,
+    });
+    guardians.push_back(types::Guardian {
+        address: guardian3,
+        voting_power: 1,
+    });
+    client.initialize_guardians(&guardians);
+
+    let wasm_hash = String::from_str(&e, "boundary_hash");
+    e.ledger().with_mut(|li| li.timestamp = 1000);
+    client.initiate_upgrade(&wasm_hash);
+    client.vote_for_upgrade(&guardian1, &true);
+
+    e.ledger()
+        .with_mut(|li| li.timestamp = 1000 + types::TIMELOCK_DURATION + 1);
+    let execute_result = client.try_execute_upgrade();
+    assert_eq!(execute_result, Err(Ok(ErrorCode::InsufficientVotes)));
+
+    e.ledger().with_mut(|li| {
+        li.timestamp = 1000 + types::TIMELOCK_DURATION + 1 + types::UPGRADE_COOLDOWN_DURATION
+    });
+
+    let result = client.try_initiate_upgrade(&wasm_hash);
+    assert_eq!(result, Err(Ok(ErrorCode::UpgradeHashInCooldown)));
+}
+
 // ===================== Conditional/Chained Market Tests (Issue #25) =====================
 
 #[test]

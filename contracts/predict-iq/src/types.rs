@@ -120,6 +120,7 @@ pub enum ConfigKey {
     GuardianSet,
     PendingUpgrade,
     UpgradeVotes,
+    UpgradeRejectedAt(String),
     GovernanceToken,
     MaxPushPayoutWinners,
     PendingGuardianRemoval,
@@ -151,6 +152,10 @@ pub struct PendingUpgrade {
     pub votes_against: Vec<Address>,
 }
 
+// Constants for upgrade governance
+pub const TIMELOCK_DURATION: u64 = 48 * 60 * 60; // 48 hours in seconds
+pub const MAJORITY_THRESHOLD_PERCENT: u32 = 51; // 51% for majority
+pub const UPGRADE_COOLDOWN_DURATION: u64 = 7 * 24 * 60 * 60; // 7 days in seconds
 /// Issue #13: Default timelock — 48 hours. Overridable via ConfigKey::TimelockDuration.
 pub const TIMELOCK_DURATION: u64 = 48 * 60 * 60;
 pub const MAJORITY_THRESHOLD_PERCENT: u32 = 51;
