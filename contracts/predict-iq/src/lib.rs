@@ -6,6 +6,8 @@ mod modules;
 mod test;
 #[cfg(test)]
 mod query_tests;
+#[cfg(test)]
+mod test_tie_handling;
 pub mod types;
 
 pub use errors::ErrorCode;
