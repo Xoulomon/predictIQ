@@ -6,6 +6,8 @@ mod modules;
 mod test;
 #[cfg(test)]
 mod query_tests;
+#[cfg(test)]
+mod test_multi_outcome_voting;
 pub mod types;
 
 pub use errors::ErrorCode;
@@ -98,29 +100,17 @@ impl PredictIQ {
         crate::modules::bets::claim_winnings(&e, bettor, market_id)
     }
 
-    pub fn withdraw_refund(e: Env, bettor: Address, market_id: u64) -> Result<i128, ErrorCode> {
-        crate::modules::cancellation::withdraw_refund(&e, bettor, market_id)
-    }
-
-    pub fn cancel_market_admin(e: Env, market_id: u64) -> Result<(), ErrorCode> {
-        crate::modules::cancellation::cancel_market_admin(&e, market_id)
-    pub fn claim_winnings(
-        e: Env,
-        bettor: Address,
-        market_id: u64,
-        token_address: Address,
-    ) -> Result<i128, ErrorCode> {
-        crate::modules::bets::claim_winnings(&e, bettor, market_id, token_address)
-    }
-
     pub fn withdraw_refund(
         e: Env,
         bettor: Address,
         market_id: u64,
         outcome: u32,
-        token_address: Address,
     ) -> Result<i128, ErrorCode> {
-        crate::modules::bets::withdraw_refund(&e, bettor, market_id, token_address)
+        crate::modules::cancellation::withdraw_refund(&e, bettor, market_id, outcome)
+    }
+
+    pub fn cancel_market_admin(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::cancellation::cancel_market_admin(&e, market_id)
     }
 
     pub fn get_market(e: Env, id: u64) -> Option<crate::types::Market> {

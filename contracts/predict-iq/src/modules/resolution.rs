@@ -162,6 +162,12 @@ pub fn admin_fallback_resolution(
 }
 
 /// Single-pass O(n) tally. n is bounded by MAX_OUTCOMES_PER_MARKET (32).
+///
+/// Uses `Option<u32>` for the leading outcome so that outcome 0 is never
+/// implicitly treated as the winner when it received zero votes.  The previous
+/// `max_outcome = 0u32` default caused a silent "unused tally" path: outcome 0
+/// was returned as the leader even when its tally was 0 and another outcome
+/// had the actual plurality.
 fn calculate_voting_outcome(e: &Env, market: &crate::types::Market) -> Result<u32, ErrorCode> {
     let num_outcomes = market.options.len();
 
@@ -170,26 +176,33 @@ fn calculate_voting_outcome(e: &Env, market: &crate::types::Market) -> Result<u3
     }
 
     let mut total_votes: i128 = 0;
-    let mut max_outcome = 0u32;
-    let mut max_votes = 0i128;
+    let mut max_outcome: Option<u32> = None;
+    let mut max_votes: i128 = 0;
 
     for outcome in 0..num_outcomes {
         let tally = voting::get_tally(e, market.id, outcome);
         total_votes += tally;
+        // Strictly greater-than: ties are broken in favour of the lower index,
+        // which is deterministic and consistent with the loop order.
         if tally > max_votes {
             max_votes = tally;
-            max_outcome = outcome;
+            max_outcome = Some(outcome);
         }
     }
 
+    // No votes cast at all — cannot determine a winner.
     if total_votes == 0 {
         return Err(ErrorCode::NoMajorityReached);
     }
 
-    // Check if the leading outcome exceeds the 60% supermajority threshold
+    // `max_outcome` is `Some` here because total_votes > 0 guarantees at least
+    // one outcome had tally > 0, which satisfies the `tally > max_votes` branch.
+    let winner = max_outcome.ok_or(ErrorCode::NoMajorityReached)?;
+
+    // Check if the leading outcome exceeds the 60% supermajority threshold.
     let majority_pct = (max_votes * 10_000) / total_votes;
     if majority_pct >= MAJORITY_THRESHOLD_BPS {
-        Ok(max_outcome)
+        Ok(winner)
     } else {
         Err(ErrorCode::NoMajorityReached)
     }
