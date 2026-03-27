@@ -1,8 +1,6 @@
 #![cfg(test)]
 use super::*;
 use crate::modules::markets::{self, DataKey};
-use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{token, Address, Env, String, Vec};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{token, Address, BytesN, Env, String, Vec};
 
@@ -46,13 +44,9 @@ fn create_test_market(
     let oracle_config = types::OracleConfig {
         oracle_address: Address::generate(e),
         feed_id: String::from_str(e, "test_feed"),
-        min_responses: 1,
-        max_staleness_seconds: 300,
-        max_confidence_bps: 200,
         min_responses: Some(1),
         max_staleness_seconds: 3600,
         max_confidence_bps: 200,
-        max_confidence_bps: 100,
     };
 
     client.create_market(
@@ -87,6 +81,8 @@ fn make_stored_market(e: &Env, id: u64) -> types::Market {
             oracle_address: Address::generate(e),
             feed_id: String::from_str(e, "seeded_feed"),
             min_responses: Some(1),
+            max_staleness_seconds: 3600,
+            max_confidence_bps: 200,
         },
         total_staked: 0,
         payout_mode: types::PayoutMode::Pull,
@@ -94,6 +90,14 @@ fn make_stored_market(e: &Env, id: u64) -> types::Market {
         creation_deposit: 0,
         parent_id: 0,
         parent_outcome_idx: 0,
+        resolved_at: None,
+        token_address: Address::generate(e),
+        outcome_stakes: soroban_sdk::Map::new(e),
+        pending_resolution_timestamp: None,
+        dispute_snapshot_ledger: None,
+        dispute_timestamp: None,
+        winner_counts: soroban_sdk::Map::new(e),
+        total_claimed: 0,
     }
 }
 

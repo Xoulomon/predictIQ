@@ -1,7 +1,7 @@
 use crate::errors::ErrorCode;
 use crate::modules::{markets, sac};
 use crate::types::{Bet, MarketStatus, BET_TTL_LOW_THRESHOLD, BET_TTL_HIGH_THRESHOLD};
-use soroban_sdk::{contracttype, token, Address, Env};
+use soroban_sdk::{contracttype, Address, Env};
 
 /// TTL Strategy for per-user bet records (Issue #100)
 ///
@@ -108,6 +108,16 @@ pub fn place_bet(
         &amount,
     )?;
 
+    // Deduct protocol fee from the bet amount before crediting the pool.
+    // This ensures total_staked always reflects the net distributable pool,
+    // so the parimutuel formula pays out the correct proportional share.
+    let fee = crate::modules::fees::calculate_tiered_fee(e, amount, &market.tier);
+    let net_amount = amount - fee;
+
+    if fee > 0 {
+        crate::modules::fees::collect_fee(e, token_address.clone(), fee);
+    }
+
     let bet_key = DataKey::Bet(market_id, bettor.clone(), outcome);
     let mut existing_bet: Bet = e.storage().persistent().get(&bet_key).unwrap_or(Bet {
         market_id,
@@ -116,16 +126,17 @@ pub fn place_bet(
         amount: 0,
     });
 
-    existing_bet.amount += amount;
+    // Store the net (post-fee) amount so the payout formula is always correct.
+    existing_bet.amount += net_amount;
     existing_bet.outcome = outcome;
-    market.total_staked += amount;
+    market.total_staked += net_amount;
 
     let outcome_stake = markets::get_outcome_stake(e, market_id, outcome);
-    markets::set_outcome_stake(e, market_id, outcome, outcome_stake + amount);
+    markets::set_outcome_stake(e, market_id, outcome, outcome_stake + net_amount);
     markets::increment_outcome_bet_count(e, market_id, outcome);
 
     // Issue #24: Maintain actual winner count per outcome
-    let is_new_bettor = existing_bet.amount == amount; // first bet on this outcome
+    let is_new_bettor = existing_bet.amount == net_amount; // first bet on this outcome
     if is_new_bettor {
         let current_count = market.winner_counts.get(outcome).unwrap_or(0);
         market.winner_counts.set(outcome, current_count + 1);
@@ -136,9 +147,8 @@ pub fn place_bet(
     markets::update_market(e, market);
     markets::bump_market_ttl(e, market_id);
 
-    // Track referral reward
+    // Track referral reward — 10% of the protocol fee goes to the referrer.
     if let Some(ref r) = referrer {
-        let fee = crate::modules::fees::calculate_fee(e, amount);
         if fee > 0 {
             crate::modules::fees::add_referral_reward(e, r, &token_address, fee);
         }

@@ -15,7 +15,7 @@ pub mod types;
 pub use errors::ErrorCode;
 
 use crate::modules::admin;
-use crate::types::{CircuitBreakerState, ConfigKey, Guardian, UpgradeStats};
+use crate::types::{CircuitBreakerState, ConfigKey, UpgradeStats};
 
 #[contract]
 pub struct PredictIQ;
@@ -26,7 +26,6 @@ impl PredictIQ {
         e: Env,
         admin: Address,
         base_fee: i128,
-        guardians: Vec<crate::types::Guardian>,
     ) -> Result<(), ErrorCode> {
         // Require the deployer's authorization to prevent front-running attacks.
         // Only the account that deployed this contract can call initialize.
@@ -36,17 +35,12 @@ impl PredictIQ {
             return Err(ErrorCode::AlreadyInitialized);
         }
 
-        if guardians.is_empty() {
-            return Err(ErrorCode::NotAuthorized);
-        }
-
         admin::set_admin(&e, admin);
         e.storage().persistent().set(&ConfigKey::BaseFee, &base_fee);
         e.storage().instance().set(
             &ConfigKey::CircuitBreakerState,
             &CircuitBreakerState::Closed,
         );
-        crate::modules::governance::initialize_guardians(&e, guardians)?;
         Ok(())
     }
 
@@ -108,6 +102,10 @@ impl PredictIQ {
 
     pub fn withdraw_refund(e: Env, bettor: Address, market_id: u64) -> Result<i128, ErrorCode> {
         crate::modules::cancellation::withdraw_refund(&e, bettor, market_id)
+    }
+
+    pub fn cancel_market_admin(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        crate::modules::cancellation::cancel_market_admin(&e, market_id)
     }
 
     pub fn cancel_market_admin(e: Env, market_id: u64) -> Result<(), ErrorCode> {

@@ -34,6 +34,8 @@ pub struct Market {
     pub pending_resolution_timestamp: Option<u64>, // Timestamp when resolution was initiated
     pub dispute_snapshot_ledger: Option<u32>,  // Ledger sequence for snapshot voting
     pub dispute_timestamp: Option<u64>,        // Timestamp when dispute was filed
+    pub winner_counts: Map<u32, u32>,          // Issue #24: unique bettor count per outcome
+    pub total_claimed: i128,                   // Issue #17: total winnings claimed (for prune guard)
 }
 
 #[contracttype]
@@ -87,14 +89,9 @@ pub struct LockedTokens {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OracleConfig {
-    pub oracle_address: Address,     // Deployed Pyth contract address on this network
-    pub feed_id: String,             // 64-char hex-encoded 32-byte Pyth price feed ID
-    pub min_responses: u32,          // Minimum oracle responses required (default: 1)
-    pub max_staleness_seconds: u64,  // Max age of price data in seconds (default: 300)
-    pub max_confidence_bps: u64,     // Max confidence interval in basis points (default: 200 = 2%)
-    pub oracle_address: Address,
-    pub feed_id: String,
-    pub min_responses: Option<u32>, // Optimized: None defaults to 1
+    pub oracle_address: Address,    // Deployed Pyth contract address on this network
+    pub feed_id: String,            // 64-char hex-encoded 32-byte Pyth price feed ID
+    pub min_responses: Option<u32>, // Minimum oracle responses required; None defaults to 1
     pub max_staleness_seconds: u64, // Max age of price data in seconds
     pub max_confidence_bps: u64,    // Max confidence interval in basis points
 }
