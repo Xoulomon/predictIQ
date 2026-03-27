@@ -2008,6 +2008,76 @@ fn test_double_vote_still_rejected_with_optimized_struct() {
 
 
 
+// ===================== Dispute Deadline Idempotency Test =====================
+
+#[test]
+fn test_dispute_deadline_extension_is_one_time_and_idempotent() {
+    // Verifies that a second file_dispute call on an already-Disputed market:
+    //   1. Is rejected with MarketNotPendingResolution.
+    //   2. Does NOT extend resolution_deadline a second time.
+    let (e, _admin, _contract_id, client) = setup_test_env();
+    client.set_creation_deposit(&0);
+
+    let creator = Address::generate(&e);
+    let native_token = Address::generate(&e);
+    let resolution_deadline = 2000u64;
+
+    e.ledger().with_mut(|li| li.timestamp = 500);
+
+    let market_id = client.create_market(
+        &creator,
+        &String::from_str(&e, "Idempotent dispute test"),
+        &{
+            let mut opts = Vec::new(&e);
+            opts.push_back(String::from_str(&e, "Yes"));
+            opts.push_back(String::from_str(&e, "No"));
+            opts
+        },
+        &1000,
+        &resolution_deadline,
+        &types::OracleConfig {
+            oracle_address: Address::generate(&e),
+            feed_id: String::from_str(&e, "test"),
+            min_responses: Some(1),
+            max_staleness_seconds: 3600,
+            max_confidence_bps: 200,
+        },
+        &types::MarketTier::Basic,
+        &native_token,
+        &0,
+        &0,
+    );
+
+    // Move market to PendingResolution
+    client.set_oracle_result(&market_id, &0, &0);
+    e.ledger().with_mut(|li| li.timestamp = resolution_deadline);
+    client.attempt_oracle_resolution(&market_id);
+
+    // First dispute — must succeed and extend deadline by one dispute window (72h)
+    let disputer = Address::generate(&e);
+    e.ledger().with_mut(|li| li.timestamp = resolution_deadline + 1000);
+    client.file_dispute(&disputer, &market_id);
+
+    let market_after_first = client.get_market(&market_id).unwrap();
+    assert_eq!(market_after_first.status, types::MarketStatus::Disputed);
+    let deadline_after_first = market_after_first.resolution_deadline;
+    // Deadline must have been extended exactly once
+    assert_eq!(
+        deadline_after_first,
+        resolution_deadline + crate::modules::resolution::DEFAULT_DISPUTE_WINDOW_SECONDS
+    );
+
+    // Second dispute attempt — must be rejected because market is already Disputed
+    let second_disputer = Address::generate(&e);
+    let result = client.try_file_dispute(&second_disputer, &market_id);
+    assert_eq!(result, Err(Ok(ErrorCode::MarketNotPendingResolution)));
+
+    // Deadline must be unchanged after the rejected second attempt
+    let market_after_second = client.get_market(&market_id).unwrap();
+    assert_eq!(market_after_second.resolution_deadline, deadline_after_first);
+    assert_eq!(market_after_second.status, types::MarketStatus::Disputed);
+}
+
 #[test]
 fn test_initialize_rejects_non_deployer() {
     let e = Env::default();
