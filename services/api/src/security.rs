@@ -6,7 +6,6 @@ use std::{
 };
 
 use axum::{
-    body::Body,
     extract::{ConnectInfo, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     middleware::Next,
@@ -14,6 +13,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 
 /// Rate limiter configuration
@@ -257,7 +257,19 @@ impl ApiKeyAuth {
     }
 
     pub fn verify(&self, key: &str) -> bool {
-        self.valid_keys.iter().any(|k| k == key)
+        // Use constant-time comparison to prevent timing attacks
+        for valid_key in self.valid_keys.iter() {
+            // First check length equality (this is safe to compare normally)
+            if valid_key.len() != key.len() {
+                continue;
+            }
+            
+            // Use constant-time byte comparison for the actual key content
+            if valid_key.as_bytes().ct_eq(key.as_bytes()).into() {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -445,5 +457,57 @@ mod tests {
         headers.insert("x-forwarded-for", "2001:db8::1, 192.168.1.1".parse().unwrap());
         
         assert_eq!(extract_client_ip(&headers, None), "2001:db8::1");
+    }
+
+    #[test]
+    fn test_api_key_auth_verify_valid_key() {
+        let auth = ApiKeyAuth::new(vec!["test-key-123".to_string(), "another-key".to_string()]);
+        assert!(auth.verify("test-key-123"));
+        assert!(auth.verify("another-key"));
+    }
+
+    #[test]
+    fn test_api_key_auth_verify_invalid_key() {
+        let auth = ApiKeyAuth::new(vec!["test-key-123".to_string()]);
+        assert!(!auth.verify("wrong-key"));
+        assert!(!auth.verify("test-key-12")); // Different length
+        assert!(!auth.verify("test-key-1234")); // Different length
+        assert!(!auth.verify(""));
+    }
+
+    #[test]
+    fn test_api_key_auth_verify_empty_keys() {
+        let auth = ApiKeyAuth::new(vec![]);
+        assert!(!auth.verify("any-key"));
+        assert!(!auth.verify(""));
+    }
+
+    #[test]
+    fn test_api_key_auth_verify_edge_cases() {
+        let auth = ApiKeyAuth::new(vec!["".to_string(), "a".to_string()]);
+        assert!(auth.verify("")); // Empty string key
+        assert!(auth.verify("a")); // Single character key
+        assert!(!auth.verify("b")); // Same length but different content
+    }
+
+    #[test]
+    fn test_api_key_auth_constant_time_behavior() {
+        // Test that verification time doesn't depend on how many keys match partially
+        let keys = vec![
+            "aaaaaaaaaaaaaaaa".to_string(),
+            "baaaaaaaaaaaaaaaa".to_string(),
+            "caaaaaaaaaaaaaaaa".to_string(),
+            "daaaaaaaaaaaaaaaa".to_string(),
+            "target-key-123456".to_string(),
+        ];
+        let auth = ApiKeyAuth::new(keys);
+
+        // These should all take roughly the same time regardless of where they differ
+        assert!(!auth.verify("aaaaaaaaaaaaaaab")); // Differs at last char of first key
+        assert!(!auth.verify("baaaaaaaaaaaaaaab")); // Differs at last char of second key
+        assert!(!auth.verify("caaaaaaaaaaaaaaab")); // Differs at last char of third key
+        assert!(!auth.verify("daaaaaaaaaaaaaaab")); // Differs at last char of fourth key
+        assert!(auth.verify("target-key-123456")); // Exact match
+        assert!(!auth.verify("target-key-123457")); // Differs at last char of matching key
     }
 }

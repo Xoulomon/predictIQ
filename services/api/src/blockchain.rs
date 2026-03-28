@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -697,14 +698,14 @@ impl BlockchainClient {
 
     pub async fn run_transaction_monitor(self: Arc<Self>) {
         loop {
-            let hashes = self
+            let hashes: Vec<String> = self
                 .monitor
                 .watched_txs
                 .read()
                 .await
                 .iter()
                 .cloned()
-                .collect::<Vec<_>>();
+                .collect();
 
             for hash in hashes {
                 if let Ok(status) = self.transaction_status_cached(&hash).await {

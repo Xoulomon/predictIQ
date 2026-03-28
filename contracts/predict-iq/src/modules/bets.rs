@@ -213,6 +213,13 @@ fn internal_claim_amount(
     }
     e.storage().persistent().remove(bet_key);
 
+    if !is_refund {
+        if let Some(mut market) = markets::get_market(e, market_id) {
+            market.total_claimed = market.total_claimed.saturating_add(amount);
+            markets::update_market(e, market);
+        }
+    }
+
     crate::modules::events::emit_rewards_claimed(
         e,
         market_id,

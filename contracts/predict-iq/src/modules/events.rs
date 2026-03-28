@@ -117,7 +117,7 @@ pub fn emit_oracle_result_set(e: &Env, market_id: u64, oracle_address: Address, 
 /// Data: (outcome)
 pub fn emit_oracle_resolved(e: &Env, market_id: u64, oracle_address: Address, outcome: u32) {
     e.events().publish(
-        (symbol_short!("orc_res"), market_id, oracle_address),
+        (symbol_short!("orcl_res"), market_id, oracle_address),
         outcome,
     );
 }
@@ -155,7 +155,7 @@ pub fn emit_market_cancelled(e: &Env, market_id: u64, admin: Address) {
 /// Data: ()
 pub fn emit_market_cancelled_vote(e: &Env, market_id: u64, resolver: Address) {
     e.events()
-        .publish((symbol_short!("mkt_cnclv"), market_id, resolver), ());
+        .publish((symbol_short!("mk_cn_vt"), market_id, resolver), ());
 }
 
 /// Emit ReferralReward event
@@ -184,6 +184,19 @@ pub fn emit_circuit_breaker_auto(e: &Env, contract_address: Address, error_count
     );
 }
 
+/// Monitoring counters cleared (`reset_monitoring`).
+pub fn emit_monitoring_state_reset(
+    e: &Env,
+    resetter: Address,
+    previous_error_count: u32,
+    previous_last_observation: u64,
+) {
+    e.events().publish(
+        (symbol_short!("mon_reset"), resetter),
+        (previous_error_count, previous_last_observation),
+    );
+}
+
 /// Emit FeeCollected event
 /// Topics: [fee_colct, 0 (no market), contract_address]
 /// Data: (amount)
@@ -202,7 +215,7 @@ pub fn emit_admin_fallback_resolution(
     winning_outcome: u32,
 ) {
     e.events().publish(
-        (symbol_short!("adm_fback"), market_id, admin),
+        (symbol_short!("adm_fbk"), market_id, admin),
         winning_outcome,
     );
 }

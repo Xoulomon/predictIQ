@@ -22,8 +22,7 @@ impl PredictIQ {
         admin: Address,
         base_fee: i128,
     ) -> Result<(), ErrorCode> {
-        // Require the deployer's authorization to prevent front-running attacks.
-        // Only the account that deployed this contract can call initialize.
+        // Require the admin account to authorize initialize (standard Soroban init pattern).
         admin.require_auth();
 
         if e.storage().persistent().has(&ConfigKey::Admin) {
@@ -147,11 +146,11 @@ impl PredictIQ {
     }
 
     pub fn set_fee_admin(e: Env, fee_admin: Address) -> Result<(), ErrorCode> {
-        crate::modules::admin::set_fee_admin(&e, fee_admin)
+        crate::modules::fees::set_fee_admin(&e, fee_admin)
     }
 
     pub fn get_fee_admin(e: Env) -> Option<Address> {
-        crate::modules::admin::get_fee_admin(&e)
+        crate::modules::fees::get_fee_admin(&e)
     }
 
     pub fn get_revenue(e: Env, token: Address) -> i128 {

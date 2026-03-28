@@ -10,6 +10,9 @@ mod rate_limit;
 mod security;
 mod validation;
 
+#[cfg(test)]
+mod api_key_auth_tests;
+
 use std::sync::Arc;
 
 use axum::{

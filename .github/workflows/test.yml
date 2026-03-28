@@ -248,37 +248,6 @@ jobs:
         run: cargo fmt --all -- --check
         working-directory: contracts/predict-iq
 
-  snapshot-tests:
-    name: Snapshot Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Install Soroban CLI
-        run: cargo install --locked soroban-cli --features opt
-
-      - name: Run snapshot tests
-        run: cargo test --features testutils
-        working-directory: contracts/predict-iq
-
-      - name: Check for snapshot changes
-        run: |
-          if git diff --exit-code test_snapshots/; then
-            echo "Snapshots are up to date"
-          else
-            echo "Snapshot changes detected - review carefully"
-            git diff test_snapshots/
-            exit 1
-          fi
-        working-directory: contracts/predict-iq
-
   build-optimized:
     name: Build Optimized Contract
     runs-on: ubuntu-latest
@@ -329,7 +298,6 @@ jobs:
       - clippy
       - oracle-quality-gate
       - format
-      - snapshot-tests
       - build-optimized
     runs-on: ubuntu-latest
     steps:

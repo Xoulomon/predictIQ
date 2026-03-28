@@ -34,7 +34,6 @@ fn test_create_market_basic() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -71,7 +70,6 @@ fn test_create_market_with_single_option_fails() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -107,7 +105,6 @@ fn test_create_market_with_too_many_outcomes() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -145,7 +142,6 @@ fn test_create_market_deadline_in_past() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -181,7 +177,6 @@ fn test_create_market_resolution_before_deadline() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -217,7 +212,6 @@ fn test_market_id_increments() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 
@@ -315,7 +309,6 @@ fn test_market_tiers() {
         feed_id: String::from_str(&env, "test"),
         min_responses: Some(1),
         max_staleness_seconds: 3600,
-        max_confidence_bps: 200,
         max_confidence_bps: 100,
     };
 

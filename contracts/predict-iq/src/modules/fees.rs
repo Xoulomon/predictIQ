@@ -34,6 +34,28 @@ pub fn set_base_fee(e: &Env, amount: i128) -> Result<(), ErrorCode> {
     Ok(())
 }
 
+pub fn set_fee_admin(e: &Env, fee_admin: Address) -> Result<(), ErrorCode> {
+    admin::require_admin(e)?;
+    e.storage()
+        .persistent()
+        .set(&ConfigKey::FeeAdmin, &fee_admin);
+    bump_config_ttl(e, &ConfigKey::FeeAdmin);
+    Ok(())
+}
+
+pub fn get_fee_admin(e: &Env) -> Option<Address> {
+    e.storage().persistent().get(&ConfigKey::FeeAdmin)
+}
+
+fn require_fee_withdraw_auth(e: &Env) -> Result<(), ErrorCode> {
+    if let Some(fee_admin) = get_fee_admin(e) {
+        fee_admin.require_auth();
+    } else {
+        admin::require_admin(e)?;
+    }
+    Ok(())
+}
+
 pub fn calculate_fee(e: &Env, amount: i128) -> i128 {
     let base_fee = get_base_fee(e);
     amount.saturating_mul(base_fee) / BPS_DENOMINATOR
@@ -96,7 +118,7 @@ pub fn withdraw_protocol_fees(
     token: &Address,
     recipient: &Address,
 ) -> Result<i128, ErrorCode> {
-    admin::require_admin(e)?;
+    require_fee_withdraw_auth(e)?;
 
     let key = DataKey::FeeRevenue(token.clone());
     let balance: i128 = e.storage().persistent().get(&key).unwrap_or(0);

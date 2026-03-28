@@ -55,8 +55,11 @@ pub enum MarketTier {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CreatorReputation {
-    pub score: u32, // Reputation score (0-1000+)
+pub enum CreatorReputation {
+    None,
+    Basic,
+    Pro,
+    Institutional,
 }
 
 #[contracttype]
@@ -108,6 +111,8 @@ pub enum ConfigKey {
     Admin,
     GuardianAccount,
     BaseFee,
+    /// Optional dedicated account allowed to withdraw protocol fees (Issue #26).
+    FeeAdmin,
     CircuitBreakerState,
     CreationDeposit,
     GuardianSet,
@@ -120,7 +125,7 @@ pub enum ConfigKey {
     MinimumBetAmount,
     /// Issue #8: Configurable dispute window duration in seconds.
     DisputeWindow,
-    /// Issue #13: Configurable timelock duration in seconds.
+    /// Effective upgrade timelock duration in seconds (governance override).
     TimelockDuration,
 }
 
@@ -150,10 +155,27 @@ pub struct PendingUpgrade {
     pub votes_against: Vec<Address>,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingGuardianRemoval {
+    pub target_guardian: Address,
+    pub initiated_at: u64,
+    pub votes_for: Vec<Address>,
+}
+
+/// Vote counts surfaced for upgrade proposals (`get_upgrade_votes`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpgradeStats {
+    pub votes_for: u32,
+    pub votes_against: u32,
+}
+
 /// Issue #13: Default timelock — 48 hours.
 pub const TIMELOCK_DURATION: u64 = 48 * 60 * 60;
-pub const TIMELOCK_MIN_SECONDS: u64 = 6 * 60 * 60;   // 6 hours
-pub const TIMELOCK_MAX_SECONDS: u64 = 7 * 24 * 60 * 60; // 7 days
+/// Bounds for configurable upgrade timelock (6 hours … 7 days).
+pub const TIMELOCK_MIN_SECONDS: u64 = 6 * 60 * 60;
+pub const TIMELOCK_MAX_SECONDS: u64 = 7 * 24 * 60 * 60;
 pub const MAJORITY_THRESHOLD_PERCENT: u32 = 51;
 pub const UPGRADE_COOLDOWN_DURATION: u64 = 7 * 24 * 60 * 60; // 7 days
 
