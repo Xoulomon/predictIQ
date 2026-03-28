@@ -181,6 +181,8 @@ pub fn allocate_market_id(e: &Env) -> Result<u64, ErrorCode> {
     e.storage().instance().set(&DataKey::MarketCount, &next_id);
 
     Ok(next_id)
+}
+
 /// Validates that a parent market exists, is resolved, and resolved to the required outcome.
 /// Called by both create_market and place_bet to enforce consistent conditional market rules.
 pub fn validate_parent_market(

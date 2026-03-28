@@ -1,31 +1,31 @@
 #![cfg(test)]
 
-//! Comprehensive tests for Oracle price validation, with focus on confidence threshold rounding.
-//!
-//! # Issue #260: Confidence Threshold Rounding
-//!
-//! The confidence validation formula is: `max_conf = (price_abs * max_confidence_bps) / 10000`
-//!
-//! ## Problem
-//! Integer division can introduce bias for small prices:
-//! - price=1, bps=500 (5%): (1 * 500) / 10000 = 0 (truncates, should be ~0.05)
-//! - price=10, bps=100 (1%): (10 * 100) / 10000 = 0 (truncates, should be ~0.1)
-//! - price=100, bps=100 (1%): (100 * 100) / 10000 = 1 (correct)
-//!
-//! This causes a **downward bias** for small prices, making it harder to accept prices
-//! with any confidence interval at very small valuations.
-//!
-//! ## Potential Solutions
-//! 1. **Ceiling division**: Use `(price * bps + 9999) / 10000` to round up
-//! 2. **Fixed-point math**: Scale up before division to preserve precision
-//! 3. **Reverse formula**: Check `(price * bps) >= (conf * 10000)` to avoid division
-//!
-//! ## Test Coverage
-//! - `test_confidence_rounding_small_prices`: Tests 1-100 range prices
-//! - `test_confidence_rounding_large_prices`: Tests million+ range prices
-//! - `test_confidence_rounding_edge_cases_low_prices`: Targets specific rounding boundaries
-//! - `test_confidence_rounding_negative_prices`: Validates absolute value handling
-//! - `test_confidence_rounding_boundary_conditions`: Documents exact rounding behavior
+// Comprehensive tests for Oracle price validation, with focus on confidence threshold rounding.
+//
+// # Issue #260: Confidence Threshold Rounding
+//
+// The confidence validation formula is: `max_conf = (price_abs * max_confidence_bps) / 10000`
+//
+// ## Problem
+// Integer division can introduce bias for small prices:
+// - price=1, bps=500 (5%): (1 * 500) / 10000 = 0 (truncates, should be ~0.05)
+// - price=10, bps=100 (1%): (10 * 100) / 10000 = 0 (truncates, should be ~0.1)
+// - price=100, bps=100 (1%): (100 * 100) / 10000 = 1 (correct)
+//
+// This causes a **downward bias** for small prices, making it harder to accept prices
+// with any confidence interval at very small valuations.
+//
+// ## Potential Solutions
+// 1. **Ceiling division**: Use `(price * bps + 9999) / 10000` to round up
+// 2. **Fixed-point math**: Scale up before division to preserve precision
+// 3. **Reverse formula**: Check `(price * bps) >= (conf * 10000)` to avoid division
+//
+// ## Test Coverage
+// - `test_confidence_rounding_small_prices`: Tests 1-100 range prices
+// - `test_confidence_rounding_large_prices`: Tests million+ range prices
+// - `test_confidence_rounding_edge_cases_low_prices`: Targets specific rounding boundaries
+// - `test_confidence_rounding_negative_prices`: Validates absolute value handling
+// - `test_confidence_rounding_boundary_conditions`: Documents exact rounding behavior
 
 use super::oracles::*;
 use crate::errors::ErrorCode;
@@ -165,33 +165,33 @@ fn test_validate_price_rejects_negative_publish_time() {
 // =============================================================================
 // Issue #261: Multi-Oracle Keying Tests
 // =============================================================================
-//!
-//! # Issue #261: Multi-Oracle Keying & Collision Prevention
-//!
-//! The oracle result storage uses a composite key: `OracleData::Result(market_id, oracle_id)`
-//!
-//! ## Problem
-//! Without proper testing, the following risks exist:
-//! 1. **Key Collisions**: Different (market_id, oracle_id) pairs could hash to same storage location
-//! 2. **Data Isolation Failure**: Retrieving (market_id=1, oracle_id=1) could return data from (market_id=1, oracle_id=2)
-//! 3. **Missing Multi-Oracle Support**: No tests verifying multiple oracle IDs per market work correctly
-//! 4. **Boundary Weaknesses**: Untested edge cases with large market_ids, large oracle_ids, or both
-//!
-//! ## Storage Key Structure
-//! ```
-//! OracleData::Result(market_id: u64, oracle_id: u32) -> outcome: u32
-//! OracleData::LastUpdate(market_id: u64, oracle_id: u32) -> timestamp: u64
-//! ```
-//!
-//! ## Test Coverage
-//! - `test_multi_oracle_basic_storage_retrieval`: Verify store/retrieve for (market_id, oracle_id) pairs
-//! - `test_multi_oracle_isolation_same_market`: Ensure different oracle_ids in same market don't collide
-//! - `test_multi_oracle_isolation_different_markets`: Ensure same oracle_id in different markets don't collide
-//! - `test_multi_oracle_matrix_combinations`: Table-driven tests of all combinations
-//! - `test_multi_oracle_large_ids`: Tests with maximum/boundary u64 and u32 values
-//! - `test_multi_oracle_sequential_updates`: Ensure updates don't affect other oracles
-//! - `test_multi_oracle_timestamp_independence`: Verify timestamps are independent per (market_id, oracle_id)
-//! - `test_multi_oracle_collision_mitigation`: Demonstrates the fix prevents theoretical collisions
+//
+// # Issue #261: Multi-Oracle Keying & Collision Prevention
+//
+// The oracle result storage uses a composite key: `OracleData::Result(market_id, oracle_id)`
+//
+// ## Problem
+// Without proper testing, the following risks exist:
+// 1. **Key Collisions**: Different (market_id, oracle_id) pairs could hash to same storage location
+// 2. **Data Isolation Failure**: Retrieving (market_id=1, oracle_id=1) could return data from (market_id=1, oracle_id=2)
+// 3. **Missing Multi-Oracle Support**: No tests verifying multiple oracle IDs per market work correctly
+// 4. **Boundary Weaknesses**: Untested edge cases with large market_ids, large oracle_ids, or both
+//
+// ## Storage Key Structure
+// ```
+// OracleData::Result(market_id: u64, oracle_id: u32) -> outcome: u32
+// OracleData::LastUpdate(market_id: u64, oracle_id: u32) -> timestamp: u64
+// ```
+//
+// ## Test Coverage
+// - `test_multi_oracle_basic_storage_retrieval`: Verify store/retrieve for (market_id, oracle_id) pairs
+// - `test_multi_oracle_isolation_same_market`: Ensure different oracle_ids in same market don't collide
+// - `test_multi_oracle_isolation_different_markets`: Ensure same oracle_id in different markets don't collide
+// - `test_multi_oracle_matrix_combinations`: Table-driven tests of all combinations
+// - `test_multi_oracle_large_ids`: Tests with maximum/boundary u64 and u32 values
+// - `test_multi_oracle_sequential_updates`: Ensure updates don't affect other oracles
+// - `test_multi_oracle_timestamp_independence`: Verify timestamps are independent per (market_id, oracle_id)
+// - `test_multi_oracle_collision_mitigation`: Demonstrates the fix prevents theoretical collisions
 
 /// Basic sanity test: Store and retrieve oracle results for a single (market_id, oracle_id) pair.
 #[test]
