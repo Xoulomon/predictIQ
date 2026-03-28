@@ -19,3 +19,4 @@ testutils = ["soroban-sdk/testutils"]
 [[test]]
 name = "gas_benchmark"
 path = "benches/gas_benchmark.rs"
+

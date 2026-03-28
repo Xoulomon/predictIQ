@@ -447,6 +447,163 @@ fn test_three_outcomes_just_below_60_percent_threshold() {
     client.finalize_resolution(&market_id);
 }
 
+/// Table-driven tests for exact majority threshold boundary behavior
+/// Validates the 6000 bps (60%) threshold with precise boundary assertions
+#[test]
+fn test_majority_threshold_boundary_behavior() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+    
+    // Setup governance token
+    let token_admin = Address::generate(&e);
+    let token_id = e.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_id.address();
+    let token_client = token::StellarAssetClient::new(&e, &token_address);
+    
+    client.set_governance_token(&token_address);
+    
+    // Test cases: (outcome1_votes, outcome0_votes, expected_success, description)
+    let test_cases = vec![
+        // Just below threshold: 59.99% vs 40.01%
+        (5999, 4001, false, "59.99% - should fail (below 60% threshold)"),
+        
+        // Exactly at threshold: 60.00% vs 40.00%
+        (6000, 4000, true, "60.00% - should succeed (exactly at threshold)"),
+        
+        // Just above threshold: 60.01% vs 39.99%
+        (6001, 3999, true, "60.01% - should succeed (above 60% threshold)"),
+        
+        // Clear majority: 75.00% vs 25.00%
+        (7500, 2500, true, "75.00% - should succeed (clear majority)"),
+        
+        // Far below threshold: 50.00% vs 50.00%
+        (5000, 5000, false, "50.00% - should fail (tie, below threshold)"),
+        
+        // Edge case: 99.99% vs 0.01%
+        (9999, 1, true, "99.99% - should succeed (overwhelming majority)"),
+    ];
+    
+    for (outcome1_votes, outcome0_votes, expected_success, description) in test_cases {
+        // Create fresh market for each test case
+        let resolution_deadline = 2000;
+        let market_id = create_multi_outcome_market(&client, &e, 2, resolution_deadline);
+        
+        client.set_oracle_result(&market_id, &0);
+        
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline;
+        });
+        
+        client.attempt_oracle_resolution(&market_id);
+        
+        // File dispute
+        let disputer = Address::generate(&e);
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline + 10000;
+        });
+        
+        client.file_dispute(&disputer, &market_id);
+        
+        // Cast votes according to test case
+        let voter1 = Address::generate(&e);
+        let voter2 = Address::generate(&e);
+        
+        token_client.mint(&voter1, &outcome1_votes);
+        token_client.mint(&voter2, &outcome0_votes);
+        
+        client.cast_vote(&voter1, &market_id, &1, &outcome1_votes);
+        client.cast_vote(&voter2, &market_id, &0, &outcome0_votes);
+        
+        // Advance time by 72 hours
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline + 10000 + 259200;
+        });
+        
+        // Test the finalization result
+        let result = client.try_finalize_resolution(&market_id);
+        
+        if expected_success {
+            // Should succeed
+            assert!(result.is_ok(), "Test case failed: {} - expected success but got error {:?}", description, result);
+            
+            let market = client.get_market(&market_id).unwrap();
+            assert_eq!(market.status, types::MarketStatus::Resolved);
+            assert_eq!(market.winning_outcome, Some(1));
+        } else {
+            // Should fail with NoMajorityReached error
+            assert_eq!(result, Err(Ok(ErrorCode::NoMajorityReached)), 
+                      "Test case failed: {} - expected NoMajorityReached error but got {:?}", description, result);
+        }
+    }
+}
+
+/// Test precise threshold calculation with larger numbers to validate division precision
+#[test]
+fn test_majority_threshold_precision_with_large_numbers() {
+    let (e, _admin, _contract_id, client) = setup_test_env();
+    
+    // Setup governance token
+    let token_admin = Address::generate(&e);
+    let token_id = e.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_id.address();
+    let token_client = token::StellarAssetClient::new(&e, &token_address);
+    
+    client.set_governance_token(&token_address);
+    
+    // Test with larger numbers to ensure precision is maintained
+    let large_test_cases = vec![
+        // Scale up by 1000x: 59.99% vs 40.01%
+        (5_999_000, 4_001_000, false, "59.99% with large numbers - should fail"),
+        
+        // Scale up by 1000x: 60.00% vs 40.00%
+        (6_000_000, 4_000_000, true, "60.00% with large numbers - should succeed"),
+        
+        // Scale up by 1000x: 60.01% vs 39.99%
+        (6_001_000, 3_999_000, true, "60.01% with large numbers - should succeed"),
+    ];
+    
+    for (outcome1_votes, outcome0_votes, expected_success, description) in large_test_cases {
+        let resolution_deadline = 2000;
+        let market_id = create_multi_outcome_market(&client, &e, 2, resolution_deadline);
+        
+        client.set_oracle_result(&market_id, &0);
+        
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline;
+        });
+        
+        client.attempt_oracle_resolution(&market_id);
+        
+        let disputer = Address::generate(&e);
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline + 10000;
+        });
+        
+        client.file_dispute(&disputer, &market_id);
+        
+        let voter1 = Address::generate(&e);
+        let voter2 = Address::generate(&e);
+        
+        token_client.mint(&voter1, &outcome1_votes);
+        token_client.mint(&voter2, &outcome0_votes);
+        
+        client.cast_vote(&voter1, &market_id, &1, &outcome1_votes);
+        client.cast_vote(&voter2, &market_id, &0, &outcome0_votes);
+        
+        e.ledger().with_mut(|li| {
+            li.timestamp = resolution_deadline + 10000 + 259200;
+        });
+        
+        let result = client.try_finalize_resolution(&market_id);
+        
+        if expected_success {
+            assert!(result.is_ok(), "Large number test failed: {} - expected success", description);
+        } else {
+            assert_eq!(result, Err(Ok(ErrorCode::NoMajorityReached)), 
+                      "Large number test failed: {} - expected NoMajorityReached", description);
+        }
+    }
+}
+
 /// Test single voter with 100% of votes
 #[test]
 fn test_three_outcomes_single_voter_100_percent() {
