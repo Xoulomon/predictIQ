@@ -23,6 +23,8 @@ mod admin_test;
 #[cfg(test)]
 mod bets_test;
 #[cfg(test)]
+mod bets_fuzz_test;
+#[cfg(test)]
 mod circuit_breaker_test;
 #[cfg(test)]
 mod markets_test;
