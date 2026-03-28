@@ -1076,3 +1076,28 @@ fn test_disputed_market_finalizes_after_dispute_timestamp_plus_72h() {
     assert_eq!(market.status, types::MarketStatus::Resolved);
     assert_eq!(market.winning_outcome, Some(1));
 }
+
+// ── Issue: Zero votes on disputed finalization must return NoMajorityReached ──
+
+/// Disputed market with no votes cast must fail finalization with NoMajorityReached,
+/// not succeed or panic with an unrelated error.
+#[test]
+fn test_disputed_finalization_with_zero_votes_returns_no_majority() {
+    let (e, _admin, _, client) = setup_test_env();
+    let resolution_deadline = 2000;
+    let market_id = create_test_market(&client, &e, resolution_deadline);
+
+    client.set_oracle_result(&market_id, &0, &0);
+    e.ledger().with_mut(|li| li.timestamp = resolution_deadline);
+    client.attempt_oracle_resolution(&market_id);
+
+    let disputer = Address::generate(&e);
+    e.ledger().with_mut(|li| li.timestamp = resolution_deadline + 1000);
+    client.file_dispute(&disputer, &market_id);
+
+    // No votes cast. Advance past the 72h voting period.
+    e.ledger().with_mut(|li| li.timestamp = resolution_deadline + 1000 + 259_200);
+
+    let result = client.try_finalize_resolution(&market_id);
+    assert_eq!(result, Err(Ok(ErrorCode::NoMajorityReached)));
+}
