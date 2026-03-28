@@ -17,6 +17,7 @@ frontend/playwright/.cache/
 
 # Rust build artifacts
 contracts/**/target/
+services/**/target/
 contracts/**/*.wasm
 contracts/**/*.d
 

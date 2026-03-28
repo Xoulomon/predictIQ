@@ -339,6 +339,9 @@ pub mod signing {
     type HmacSha256 = Hmac<Sha256>;
 
     pub fn verify_signature(payload: &[u8], signature: &str, secret: &str) -> bool {
+        if secret.is_empty() {
+            return false;
+        }
         let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
             Ok(m) => m,
             Err(_) => return false,
@@ -355,6 +358,9 @@ pub mod signing {
     }
 
     pub fn generate_signature(payload: &[u8], secret: &str) -> Result<String, SigningError> {
+        if secret.is_empty() {
+            return Err(SigningError::InvalidKey);
+        }
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
             .map_err(|_| SigningError::InvalidKey)?;
         mac.update(payload);
