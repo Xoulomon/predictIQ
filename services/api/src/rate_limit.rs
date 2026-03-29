@@ -54,18 +54,19 @@ pub async fn analytics_rate_limit_middleware(
     next: Next,
 ) -> Result<Response, StatusCode> {
     // Use session ID if available, otherwise fall back to IP
-    let session_id = headers
-        .get("x-session-id")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or_else(|| {
-            let ip = extract_client_ip(&headers, connect_info.as_ref());
-            Box::leak(ip.into_boxed_str())
-        });
+    let ip;
+    let session_key = match headers.get("x-session-id").and_then(|h| h.to_str().ok()) {
+        Some(id) => id.to_owned(),
+        None => {
+            ip = extract_client_ip(&headers, connect_info.as_ref());
+            ip
+        }
+    };
 
     let config = RateLimitConfig::new(1000, Duration::from_secs(60));
 
     if !limiter
-        .check(&format!("analytics:{}", session_id), &config)
+        .check(&format!("analytics:{}", session_key), &config)
         .await
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
