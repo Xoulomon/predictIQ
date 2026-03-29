@@ -125,6 +125,10 @@ pub enum ConfigKey {
     MinimumBetAmount,
     /// Issue #8: Configurable dispute window duration in seconds.
     DisputeWindow,
+    /// Issue #170: Configurable voting period duration in seconds.
+    VotingPeriod,
+    /// Issue #170: Configurable majority threshold in basis points.
+    MajorityThreshold,
     /// Effective upgrade timelock duration in seconds (governance override).
     TimelockDuration,
 }

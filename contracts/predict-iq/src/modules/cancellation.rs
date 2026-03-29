@@ -114,7 +114,7 @@ pub fn withdraw_refund(
     // Gross refund = net amount + fee that was deducted at bet time.
     // The bettor paid `amount` originally; the contract kept `fee_paid` as
     // protocol revenue. On cancellation both must be returned.
-    let refund_amount = bet.amount + bet.fee_paid;
+    let refund_amount = bet.amount.checked_add(bet.fee_paid).ok_or(crate::errors::ErrorCode::ArithmeticOverflow)?;
     let fee_paid = bet.fee_paid;
     e.storage().persistent().remove(&bet_key);
 

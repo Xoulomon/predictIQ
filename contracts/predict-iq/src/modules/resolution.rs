@@ -6,8 +6,10 @@ use soroban_sdk::{Env, Symbol};
 /// Issue #8: Default dispute window increased from 24h → 72h for global participation.
 /// Governance can override this via set_dispute_window / ConfigKey::DisputeWindow.
 pub const DEFAULT_DISPUTE_WINDOW_SECONDS: u64 = 259_200; // 72 hours
-const VOTING_PERIOD_SECONDS: u64 = 259_200;              // 72 hours
-const MAJORITY_THRESHOLD_BPS: i128 = 6000;               // 60%
+/// Issue #170: Default voting period for dispute resolution
+pub const DEFAULT_VOTING_PERIOD_SECONDS: u64 = 259_200; // 72 hours
+/// Issue #170: Default majority threshold for dispute resolution (60%)
+pub const DEFAULT_MAJORITY_THRESHOLD_BPS: i128 = 6000; // 60%
 
 /// Returns the active dispute window: governance-configured value if set, else the 72h default.
 pub fn get_dispute_window(e: &Env) -> u64 {
@@ -27,6 +29,56 @@ pub fn set_dispute_window(e: &Env, seconds: u64) -> Result<(), ErrorCode> {
         .set(&ConfigKey::DisputeWindow, &clamped);
     e.storage().persistent().extend_ttl(
         &ConfigKey::DisputeWindow,
+        crate::types::GOV_TTL_LOW_THRESHOLD,
+        crate::types::GOV_TTL_HIGH_THRESHOLD,
+    );
+    Ok(())
+}
+
+/// Issue #170: Returns the active voting period: governance-configured value if set, else the 72h default.
+pub fn get_voting_period(e: &Env) -> u64 {
+    e.storage()
+        .persistent()
+        .get(&ConfigKey::VotingPeriod)
+        .unwrap_or(DEFAULT_VOTING_PERIOD_SECONDS)
+}
+
+/// Issue #170: Admin-only: override the voting period duration (minimum 1 hour enforced).
+pub fn set_voting_period(e: &Env, seconds: u64) -> Result<(), ErrorCode> {
+    crate::modules::admin::require_admin(e)?;
+    // Enforce a minimum of 1 hour to prevent immediate expiration.
+    let clamped = seconds.max(3_600);
+    e.storage()
+        .persistent()
+        .set(&ConfigKey::VotingPeriod, &clamped);
+    e.storage().persistent().extend_ttl(
+        &ConfigKey::VotingPeriod,
+        crate::types::GOV_TTL_LOW_THRESHOLD,
+        crate::types::GOV_TTL_HIGH_THRESHOLD,
+    );
+    Ok(())
+}
+
+/// Issue #170: Returns the active majority threshold: governance-configured value if set, else the 60% default.
+pub fn get_majority_threshold(e: &Env) -> i128 {
+    e.storage()
+        .persistent()
+        .get(&ConfigKey::MajorityThreshold)
+        .unwrap_or(DEFAULT_MAJORITY_THRESHOLD_BPS)
+}
+
+/// Issue #170: Admin-only: override the majority threshold (must be between 1% and 99%).
+pub fn set_majority_threshold(e: &Env, threshold_bps: i128) -> Result<(), ErrorCode> {
+    crate::modules::admin::require_admin(e)?;
+    // Enforce bounds: 1% (100 bps) to 99% (9900 bps)
+    if threshold_bps < 100 || threshold_bps > 9900 {
+        return Err(ErrorCode::InvalidThreshold);
+    }
+    e.storage()
+        .persistent()
+        .set(&ConfigKey::MajorityThreshold, &threshold_bps);
+    e.storage().persistent().extend_ttl(
+        &ConfigKey::MajorityThreshold,
         crate::types::GOV_TTL_LOW_THRESHOLD,
         crate::types::GOV_TTL_HIGH_THRESHOLD,
     );
@@ -94,7 +146,7 @@ pub fn finalize_resolution(e: &Env, market_id: u64) -> Result<(), ErrorCode> {
             let dispute_ts = market
                 .dispute_timestamp
                 .ok_or(ErrorCode::MarketNotDisputed)?;
-            if e.ledger().timestamp() < dispute_ts + VOTING_PERIOD_SECONDS {
+            if e.ledger().timestamp() < dispute_ts + get_voting_period(e) {
                 return Err(ErrorCode::TimelockActive);
             }
 
@@ -151,7 +203,7 @@ pub fn admin_fallback_resolution(
     let dispute_ts = market
         .dispute_timestamp
         .ok_or(ErrorCode::MarketNotDisputed)?;
-    if e.ledger().timestamp() < dispute_ts + VOTING_PERIOD_SECONDS {
+    if e.ledger().timestamp() < dispute_ts + get_voting_period(e) {
         return Err(ErrorCode::VotingPeriodNotElapsed);
     }
 
@@ -225,9 +277,9 @@ fn calculate_voting_outcome(e: &Env, market: &crate::types::Market) -> Result<u3
 
     let winner = max_outcome.ok_or(ErrorCode::NoMajorityReached)?;
 
-    // Check if the leading outcome exceeds the 60% supermajority threshold.
+    // Check if the leading outcome exceeds the configurable majority threshold.
     let majority_pct = (max_votes * 10_000) / total_votes;
-    if majority_pct >= MAJORITY_THRESHOLD_BPS {
+    if majority_pct >= get_majority_threshold(e) {
         Ok(winner)
     } else {
         Err(ErrorCode::NoMajorityReached)

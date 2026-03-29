@@ -84,4 +84,12 @@ pub enum ErrorCode {
     /// Emitted when an admin attempts fallback resolution but the voting period
     /// has not yet elapsed — the deadlock is not yet confirmed.
     VotingPeriodNotElapsed = 50,
+
+    // --- Arithmetic safety ---
+    /// Emitted when checked arithmetic operations overflow (Issue #192)
+    ArithmeticOverflow = 51,
+
+    // --- Configuration validation ---
+    /// Emitted when an invalid threshold is provided (Issue #170)
+    InvalidThreshold = 52,
 }

@@ -129,13 +129,13 @@ pub fn place_bet(
     });
 
     // Store the net (post-fee) amount so the payout formula is always correct.
-    existing_bet.amount += net_amount;
+    existing_bet.amount = existing_bet.amount.checked_add(net_amount).ok_or(ErrorCode::ArithmeticOverflow)?;
     existing_bet.fee_paid += fee;
     existing_bet.outcome = outcome;
-    market.total_staked += net_amount;
+    market.total_staked = market.total_staked.checked_add(net_amount).ok_or(ErrorCode::ArithmeticOverflow)?;
 
     let outcome_stake = markets::get_outcome_stake(e, market_id, outcome);
-    markets::set_outcome_stake(e, market_id, outcome, outcome_stake + net_amount);
+    markets::set_outcome_stake(e, market_id, outcome, outcome_stake.checked_add(net_amount).ok_or(ErrorCode::ArithmeticOverflow)?);
     markets::increment_outcome_bet_count(e, market_id, outcome);
 
     // Issue #24: Maintain actual winner count per outcome
@@ -269,7 +269,12 @@ pub fn claim_winnings(e: &Env, bettor: Address, market_id: u64) -> Result<i128, 
     // Integer division truncates down, favouring the protocol.
     let winning_outcome_stake = markets::get_outcome_stake(e, market_id, winning_outcome);
     let winning_outcome_stake = if winning_outcome_stake > 0 { winning_outcome_stake } else { bet.amount };
-    let winnings = (bet.amount * market.total_staked) / winning_outcome_stake;
+    
+    // Issue #192: Use checked arithmetic to prevent overflow in high-inflation scenarios
+    let winnings = bet.amount
+        .checked_mul(market.total_staked)
+        .and_then(|product| product.checked_div(winning_outcome_stake))
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     internal_claim_amount(
         e,
