@@ -110,6 +110,14 @@ impl Metrics {
         self.rpc_fallbacks.with_label_values(&[endpoint]).inc();
     }
 
+    pub fn observe_tx_eviction(&self, count: u64) {
+        if count > 0 {
+            self.invalidations
+                .with_label_values(&["tx_watch_eviction"])
+                .inc_by(count);
+        }
+    }
+
     pub fn render(&self) -> anyhow::Result<String> {
         let mut buffer = vec![];
         let encoder = TextEncoder::new();
