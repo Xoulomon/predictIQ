@@ -9,7 +9,7 @@ mod newsletter;
 mod rate_limit;
 pub mod security;
 mod shutdown;
-mod validation;
+pub mod validation;
 
 #[cfg(test)]
 mod shutdown_tests;
@@ -78,7 +78,7 @@ pub async fn run() -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
 
     let rate_limiter = Arc::new(RateLimiter::new());
-    let _api_key_auth = Arc::new(ApiKeyAuth::new(config.api_keys.clone()));
+    let api_key_auth = Arc::new(ApiKeyAuth::new(config.api_keys.clone()));
     let _ip_whitelist = Arc::new(IpWhitelist::new(config.admin_whitelist_ips.clone()));
 
     // Setup shutdown coordination for 3 workers: rate limiter cleanup, blockchain (2), email queue
@@ -108,11 +108,11 @@ pub async fn run() -> anyhow::Result<()> {
 
     let state = Arc::new(AppState {
         config,
-        cache,
+        cache: cache.clone(),
         db,
         blockchain,
         metrics,
-        newsletter_rate_limiter: IpRateLimiter::default(),
+        newsletter_rate_limiter: IpRateLimiter::new(cache.clone()),
         email_service: email_service.clone(),
         email_queue: email_queue.clone(),
         webhook_handler: webhook_handler.clone(),
@@ -262,6 +262,10 @@ pub async fn run() -> anyhow::Result<()> {
             "/api/v1/email/queue/stats",
             get(handlers::email_queue_stats),
         )
+        .layer(middleware::from_fn_with_state(
+            api_key_auth,
+            security::api_key_middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());
 
@@ -280,6 +284,13 @@ pub async fn run() -> anyhow::Result<()> {
         .merge(newsletter_routes)
         .merge(admin_routes)
         .merge(webhook_routes)
+        .layer(middleware::from_fn(validation::request_validation_middleware))
+        .layer(middleware::from_fn(
+            validation::content_type_validation_middleware,
+        ))
+        .layer(middleware::from_fn(
+            validation::request_size_validation_middleware,
+        ))
         .layer(cors);
 
     let listener = TcpListener::bind(bind_addr).await?;
