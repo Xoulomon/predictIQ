@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod api_key_auth_tests {
-    use crate::security::ApiKeyAuth;
+    use predictiq_api::security::ApiKeyAuth;
 
     #[test]
     fn test_api_key_auth_verify_valid_key() {

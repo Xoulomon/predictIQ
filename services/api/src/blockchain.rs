@@ -42,6 +42,20 @@ struct MonitoringState {
     tasks_started: AtomicBool,
 }
 
+/// Indicates the origin of a blockchain response payload.
+///
+/// - `Live`        – data freshly fetched from the RPC node this request.
+/// - `StaleCache`  – served from cache; RPC was not called.
+/// - `RpcFallback` – RPC call failed; zeros/defaults were substituted.
+///                   This is the signal that an incident may be in progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DataSource {
+    Live,
+    StaleCache,
+    RpcFallback,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainMarketData {
     pub market_id: i64,
@@ -50,6 +64,7 @@ pub struct ChainMarketData {
     pub onchain_volume: String,
     pub resolved_outcome: Option<u32>,
     pub ledger: u32,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +74,7 @@ pub struct PlatformStatistics {
     pub resolved_markets: u64,
     pub total_volume: String,
     pub ledger: u32,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +93,7 @@ pub struct UserBetsPage {
     pub page_size: i64,
     pub total: i64,
     pub items: Vec<UserBet>,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +103,7 @@ pub struct OracleResult {
     pub outcome: Option<u32>,
     pub confidence_bps: Option<u64>,
     pub ledger: u32,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +112,7 @@ pub struct TransactionStatus {
     pub status: String,
     pub ledger: Option<u32>,
     pub error: Option<String>,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +123,7 @@ pub struct BlockchainHealth {
     pub is_healthy: bool,
     pub contract_reachable: bool,
     pub checked_at_unix: u64,
+    pub data_source: DataSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,23 +254,32 @@ impl BlockchainClient {
             .cache
             .get_or_set_json(&key, ttl, || async move {
                 let ledger = self.latest_ledger().await.unwrap_or(0);
-                let data: Value = self
-                    .rpc_call(
+                let rpc_result = self
+                    .rpc_call::<Value>(
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
                             "key": format!("market:{}", market_id),
                         }),
                     )
-                    .await
-                    .unwrap_or_else(|_| {
-                        json!({
-                            "title": null,
-                            "status": null,
-                            "onchain_volume": "0",
-                            "resolved_outcome": null
-                        })
-                    });
+                    .await;
+
+                let (data, data_source) = match rpc_result {
+                    Ok(v) => (v, DataSource::Live),
+                    Err(err) => {
+                        tracing::warn!(error = %err, market_id, "market_data RPC fallback");
+                        self.metrics.observe_rpc_fallback(endpoint);
+                        (
+                            json!({
+                                "title": null,
+                                "status": null,
+                                "onchain_volume": "0",
+                                "resolved_outcome": null
+                            }),
+                            DataSource::RpcFallback,
+                        )
+                    }
+                };
 
                 Ok(ChainMarketData {
                     market_id,
@@ -272,6 +301,7 @@ impl BlockchainClient {
                         .and_then(Value::as_u64)
                         .map(|v| v as u32),
                     ledger,
+                    data_source,
                 })
             })
             .await?;
@@ -281,6 +311,14 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        // Responses served from cache preserve the data_source set at write time.
+        // Wrap with StaleCache only when the value came from cache and was originally live.
+        let value = if hit && value.data_source == DataSource::Live {
+            ChainMarketData { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }
@@ -294,23 +332,32 @@ impl BlockchainClient {
             .cache
             .get_or_set_json(&key, ttl, || async move {
                 let ledger = self.latest_ledger().await.unwrap_or(0);
-                let data: Value = self
-                    .rpc_call(
+                let rpc_result = self
+                    .rpc_call::<Value>(
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
                             "key": "platform:stats",
                         }),
                     )
-                    .await
-                    .unwrap_or_else(|_| {
-                        json!({
-                            "total_markets": 0,
-                            "active_markets": 0,
-                            "resolved_markets": 0,
-                            "total_volume": "0"
-                        })
-                    });
+                    .await;
+
+                let (data, data_source) = match rpc_result {
+                    Ok(v) => (v, DataSource::Live),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "platform_stats RPC fallback");
+                        self.metrics.observe_rpc_fallback(endpoint);
+                        (
+                            json!({
+                                "total_markets": 0,
+                                "active_markets": 0,
+                                "resolved_markets": 0,
+                                "total_volume": "0"
+                            }),
+                            DataSource::RpcFallback,
+                        )
+                    }
+                };
 
                 Ok(PlatformStatistics {
                     total_markets: data
@@ -331,6 +378,7 @@ impl BlockchainClient {
                         .unwrap_or("0")
                         .to_string(),
                     ledger,
+                    data_source,
                 })
             })
             .await?;
@@ -340,6 +388,12 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        let value = if hit && value.data_source == DataSource::Live {
+            PlatformStatistics { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }
@@ -360,16 +414,24 @@ impl BlockchainClient {
             .cache
             .get_or_set_json(&key, ttl, || async move {
                 let ledger = self.latest_ledger().await.unwrap_or(0);
-                let data: Value = self
-                    .rpc_call(
+                let rpc_result = self
+                    .rpc_call::<Value>(
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
                             "key": format!("user_bets:{}", user),
                         }),
                     )
-                    .await
-                    .unwrap_or_else(|_| json!({"bets": []}));
+                    .await;
+
+                let (data, data_source) = match rpc_result {
+                    Ok(v) => (v, DataSource::Live),
+                    Err(err) => {
+                        tracing::warn!(error = %err, user, "user_bets RPC fallback");
+                        self.metrics.observe_rpc_fallback(endpoint);
+                        (json!({"bets": []}), DataSource::RpcFallback)
+                    }
+                };
 
                 let bets = data
                     .get("bets")
@@ -415,6 +477,7 @@ impl BlockchainClient {
                     page_size,
                     total,
                     items,
+                    data_source,
                 })
             })
             .await?;
@@ -424,6 +487,12 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        let value = if hit && value.data_source == DataSource::Live {
+            UserBetsPage { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }
@@ -437,16 +506,24 @@ impl BlockchainClient {
             .cache
             .get_or_set_json(&key, ttl, || async move {
                 let ledger = self.latest_ledger().await.unwrap_or(0);
-                let data: Value = self
-                    .rpc_call(
+                let rpc_result = self
+                    .rpc_call::<Value>(
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
                             "key": format!("oracle_result:{}", market_id),
                         }),
                     )
-                    .await
-                    .unwrap_or_else(|_| json!({}));
+                    .await;
+
+                let (data, data_source) = match rpc_result {
+                    Ok(v) => (v, DataSource::Live),
+                    Err(err) => {
+                        tracing::warn!(error = %err, market_id, "oracle_result RPC fallback");
+                        self.metrics.observe_rpc_fallback(endpoint);
+                        (json!({}), DataSource::RpcFallback)
+                    }
+                };
 
                 Ok(OracleResult {
                     market_id,
@@ -460,6 +537,7 @@ impl BlockchainClient {
                         .map(|v| v as u32),
                     confidence_bps: data.get("confidence_bps").and_then(Value::as_u64),
                     ledger,
+                    data_source,
                 })
             })
             .await?;
@@ -469,6 +547,12 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        let value = if hit && value.data_source == DataSource::Live {
+            OracleResult { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }
@@ -490,20 +574,29 @@ impl BlockchainClient {
                     error_result_xdr: Option<String>,
                 }
 
-                let tx = self
-                    .rpc_call::<TxResponse>("getTransaction", json!({ "hash": hash }))
-                    .await
-                    .unwrap_or(TxResponse {
-                        status: "NOT_FOUND".to_string(),
-                        ledger: None,
-                        error_result_xdr: None,
-                    });
+                let (tx, data_source) =
+                    match self.rpc_call::<TxResponse>("getTransaction", json!({ "hash": hash })).await {
+                        Ok(t) => (t, DataSource::Live),
+                        Err(err) => {
+                            tracing::warn!(error = %err, hash, "tx_status RPC fallback");
+                            self.metrics.observe_rpc_fallback(endpoint);
+                            (
+                                TxResponse {
+                                    status: "NOT_FOUND".to_string(),
+                                    ledger: None,
+                                    error_result_xdr: None,
+                                },
+                                DataSource::RpcFallback,
+                            )
+                        }
+                    };
 
                 Ok(TransactionStatus {
                     hash: hash.to_string(),
                     status: tx.status,
                     ledger: tx.ledger,
                     error: tx.error_result_xdr,
+                    data_source,
                 })
             })
             .await?;
@@ -513,6 +606,12 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        let value = if hit && value.data_source == DataSource::Live {
+            TransactionStatus { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }
@@ -542,6 +641,7 @@ impl BlockchainClient {
                     .unwrap_or_default()
                     .as_secs();
 
+                // Health is always a live probe; no fallback substitution needed.
                 Ok(BlockchainHealth {
                     network: self.network.clone(),
                     rpc_url: self.rpc_url.clone(),
@@ -549,6 +649,7 @@ impl BlockchainClient {
                     is_healthy: latest > 0,
                     contract_reachable,
                     checked_at_unix,
+                    data_source: DataSource::Live,
                 })
             })
             .await?;
@@ -558,6 +659,12 @@ impl BlockchainClient {
         } else {
             self.metrics.observe_miss("chain", endpoint);
         }
+
+        let value = if hit {
+            BlockchainHealth { data_source: DataSource::StaleCache, ..value }
+        } else {
+            value
+        };
 
         Ok(value)
     }

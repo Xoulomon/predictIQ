@@ -11,6 +11,7 @@ pub struct Metrics {
     invalidations: IntCounterVec,
     request_latency: HistogramVec,
     rpc_errors: IntCounterVec,
+    rpc_fallbacks: IntCounterVec,
 }
 
 impl Metrics {
@@ -50,11 +51,21 @@ impl Metrics {
         )
         .context("rpc_errors metric")?;
 
+        let rpc_fallbacks = IntCounterVec::new(
+            prometheus::Opts::new(
+                "rpc_fallbacks_total",
+                "RPC calls that fell back to zero/default payload, by endpoint",
+            ),
+            &["endpoint"],
+        )
+        .context("rpc_fallbacks metric")?;
+
         registry.register(Box::new(cache_hits.clone()))?;
         registry.register(Box::new(cache_misses.clone()))?;
         registry.register(Box::new(invalidations.clone()))?;
         registry.register(Box::new(request_latency.clone()))?;
         registry.register(Box::new(rpc_errors.clone()))?;
+        registry.register(Box::new(rpc_fallbacks.clone()))?;
 
         Ok(Self {
             registry,
@@ -63,6 +74,7 @@ impl Metrics {
             invalidations,
             request_latency,
             rpc_errors,
+            rpc_fallbacks,
         })
     }
 
@@ -92,6 +104,10 @@ impl Metrics {
 
     pub fn observe_rpc_error(&self, method: &str) {
         self.rpc_errors.with_label_values(&[method]).inc();
+    }
+
+    pub fn observe_rpc_fallback(&self, endpoint: &str) {
+        self.rpc_fallbacks.with_label_values(&[endpoint]).inc();
     }
 
     pub fn render(&self) -> anyhow::Result<String> {
