@@ -40,3 +40,13 @@ predictIQ/
 - **Contract events:** see [Events](../API_SPEC.md#events) in `API_SPEC.md`
 - **Database schema:** see `services/api/DATABASE.md`
 - **REST endpoints:** see `services/api/openapi.yaml`
+
+## Running Tests
+
+```bash
+# Run all API tests (unit + integration)
+cd services/api && cargo test
+
+# Run only the security integration tests
+cd services/api && cargo test --test security_tests
+```
