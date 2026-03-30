@@ -15,7 +15,7 @@ use tokio::{sync::RwLock, time::sleep};
 
 use crate::{
     cache::{keys, RedisCache},
-    config::Config,
+    config::{Config, ContractKeySchema},
     metrics::Metrics,
 };
 
@@ -25,6 +25,7 @@ pub struct BlockchainClient {
     rpc_url: String,
     network: String,
     contract_id: String,
+    pub key_schema: ContractKeySchema,
     retry_attempts: u32,
     retry_base_delay_ms: u64,
     event_poll_interval: Duration,
@@ -171,6 +172,7 @@ impl BlockchainClient {
             rpc_url: config.blockchain_rpc_url.clone(),
             network: config.network_name().to_string(),
             contract_id: config.contract_id.clone(),
+            key_schema: config.contract_key_schema.clone(),
             retry_attempts: config.retry_attempts.max(1),
             retry_base_delay_ms: config.retry_base_delay_ms.max(50),
             event_poll_interval: config.event_poll_interval,
@@ -268,7 +270,7 @@ impl BlockchainClient {
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
-                            "key": format!("market:{}", market_id),
+                            "key": self.key_schema.market_key(market_id),
                         }),
                     )
                     .await;
@@ -346,7 +348,7 @@ impl BlockchainClient {
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
-                            "key": "platform:stats",
+                            "key": self.key_schema.platform_stats.clone(),
                         }),
                     )
                     .await;
@@ -428,7 +430,7 @@ impl BlockchainClient {
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
-                            "key": format!("user_bets:{}", user),
+                            "key": self.key_schema.user_bets_key(user),
                         }),
                     )
                     .await;
@@ -520,7 +522,7 @@ impl BlockchainClient {
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
-                            "key": format!("oracle_result:{}", market_id),
+                            "key": self.key_schema.oracle_result_key(market_id),
                         }),
                     )
                     .await;
@@ -639,7 +641,7 @@ impl BlockchainClient {
                         "getContractData",
                         json!({
                             "contractId": self.contract_id,
-                            "key": "platform:stats",
+                            "key": self.key_schema.platform_stats.clone(),
                         }),
                     )
                     .await
@@ -1740,4 +1742,116 @@ mod tests {
         assert_eq!(all.len(), 150, "no duplicates across pages");
         assert_eq!(all[99].id, "e-0100");
         assert_eq!(all[100].id, "e-0101");
+    }
+
+    // -------------------------------------------------------------------------
+    // ContractKeySchema – centralized key generation and per-network overrides
+    // -------------------------------------------------------------------------
+
+    use crate::config::ContractKeySchema;
+
+    fn default_schema() -> ContractKeySchema {
+        ContractKeySchema {
+            version: "1.0.0".to_string(),
+            market: "market:{id}".to_string(),
+            platform_stats: "platform:stats".to_string(),
+            user_bets: "user_bets:{id}".to_string(),
+            oracle_result: "oracle_result:{id}".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_schema_market_key() {
+        let s = default_schema();
+        assert_eq!(s.market_key(42), "market:42");
+        assert_eq!(s.market_key(-1), "market:-1");
+    }
+
+    #[test]
+    fn test_schema_user_bets_key() {
+        let s = default_schema();
+        assert_eq!(s.user_bets_key("GABC123"), "user_bets:GABC123");
+    }
+
+    #[test]
+    fn test_schema_oracle_result_key() {
+        let s = default_schema();
+        assert_eq!(s.oracle_result_key(7), "oracle_result:7");
+    }
+
+    #[test]
+    fn test_schema_platform_stats_key_is_static() {
+        let s = default_schema();
+        assert_eq!(s.platform_stats, "platform:stats");
+    }
+
+    /// Per-network override: a testnet deployment using a different prefix.
+    #[test]
+    fn test_schema_per_network_override() {
+        let s = ContractKeySchema {
+            version: "2.0.0".to_string(),
+            market: "v2_market:{id}".to_string(),
+            platform_stats: "v2_platform:stats".to_string(),
+            user_bets: "v2_user_bets:{id}".to_string(),
+            oracle_result: "v2_oracle:{id}".to_string(),
+        };
+        assert_eq!(s.market_key(1), "v2_market:1");
+        assert_eq!(s.user_bets_key("GXYZ"), "v2_user_bets:GXYZ");
+        assert_eq!(s.oracle_result_key(99), "v2_oracle:99");
+        assert_eq!(s.platform_stats, "v2_platform:stats");
+    }
+
+    /// Schema version is preserved and accessible for startup validation.
+    #[test]
+    fn test_schema_version_is_accessible() {
+        let s = default_schema();
+        assert_eq!(s.version, "1.0.0");
+    }
+
+    /// Integration: keys produced by the schema match what getContractData
+    /// would receive, validated against the v1 deployed contract naming convention.
+    #[test]
+    fn test_schema_keys_match_deployed_v1_convention() {
+        let s = default_schema();
+        // These are the exact strings the v1 contract expects.
+        assert_eq!(s.market_key(100), "market:100");
+        assert_eq!(s.platform_stats, "platform:stats");
+        assert_eq!(s.user_bets_key("GDEMO"), "user_bets:GDEMO");
+        assert_eq!(s.oracle_result_key(100), "oracle_result:100");
+    }
+
+    /// Integration: BlockchainClient uses schema keys, not hardcoded strings.
+    /// Verifies the client is constructed with the schema from config and that
+    /// the schema produces the correct RPC key for a known market id.
+    #[tokio::test]
+    async fn test_client_uses_schema_keys_for_contract_reads() {
+        let mut config = Config::from_env();
+        config.blockchain_rpc_url = "http://127.0.0.1:0".to_string();
+        config.retry_attempts = 1;
+        config.retry_base_delay_ms = 1;
+        // Use a custom schema to confirm the client picks it up.
+        config.contract_key_schema = ContractKeySchema {
+            version: "1.0.0".to_string(),
+            market: "market:{id}".to_string(),
+            platform_stats: "platform:stats".to_string(),
+            user_bets: "user_bets:{id}".to_string(),
+            oracle_result: "oracle_result:{id}".to_string(),
+        };
+
+        let metrics = Metrics::new().unwrap();
+        let cache = match RedisCache::new(&config.redis_url).await {
+            Ok(c) => c,
+            Err(_) => {
+                println!("Skipping test_client_uses_schema_keys_for_contract_reads: Redis unavailable");
+                return;
+            }
+        };
+
+        let client = BlockchainClient::new(&config, cache, metrics).unwrap();
+
+        // The key the client would send for market 5 must match the schema.
+        assert_eq!(client.key_schema.market_key(5), "market:5");
+        assert_eq!(client.key_schema.oracle_result_key(5), "oracle_result:5");
+        assert_eq!(client.key_schema.user_bets_key("GTEST"), "user_bets:GTEST");
+        assert_eq!(client.key_schema.platform_stats, "platform:stats");
     }

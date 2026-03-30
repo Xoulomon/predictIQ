@@ -63,6 +63,7 @@ pub struct Config {
     pub admin_whitelist_ips: Vec<IpAddr>,
     pub request_signing_secret: Option<String>,
     pub sendgrid_webhook_secret: Option<String>,
+    pub contract_key_schema: ContractKeySchema,
 }
 
 impl Config {
@@ -194,6 +195,7 @@ impl Config {
                 .unwrap_or_default(),
             request_signing_secret: env::var("REQUEST_SIGNING_SECRET").ok(),
             sendgrid_webhook_secret: env::var("SENDGRID_WEBHOOK_SECRET").ok(),
+            contract_key_schema: ContractKeySchema::from_env(),
         }
     }
 
@@ -203,5 +205,64 @@ impl Config {
             BlockchainNetwork::Mainnet => "mainnet",
             BlockchainNetwork::Custom => "custom",
         }
+    }
+}
+
+/// Versioned contract key schema.
+///
+/// Each field is a key template where `{id}` is replaced at call time.
+/// Defaults match the v1 deployed schema; override via env vars for per-network
+/// divergence (e.g. a testnet that uses a different naming convention).
+///
+/// Schema version is bumped whenever a key template changes, so callers can
+/// detect mismatches at startup.
+#[derive(Clone, Debug)]
+pub struct ContractKeySchema {
+    /// Semver string, e.g. "1.0.0".
+    pub version: String,
+    /// Key for a single market, `{id}` → market_id.
+    pub market: String,
+    /// Key for platform-wide statistics.
+    pub platform_stats: String,
+    /// Key for a user's bets, `{id}` → user address.
+    pub user_bets: String,
+    /// Key for an oracle result, `{id}` → market_id.
+    pub oracle_result: String,
+}
+
+impl ContractKeySchema {
+    /// Load from environment, falling back to v1 defaults.
+    ///
+    /// Override env vars:
+    /// - `CONTRACT_KEY_VERSION`
+    /// - `CONTRACT_KEY_MARKET`          (default: `"market:{id}"`)
+    /// - `CONTRACT_KEY_PLATFORM_STATS`  (default: `"platform:stats"`)
+    /// - `CONTRACT_KEY_USER_BETS`       (default: `"user_bets:{id}"`)
+    /// - `CONTRACT_KEY_ORACLE_RESULT`   (default: `"oracle_result:{id}"`)
+    pub fn from_env() -> Self {
+        Self {
+            version: env::var("CONTRACT_KEY_VERSION")
+                .unwrap_or_else(|_| "1.0.0".to_string()),
+            market: env::var("CONTRACT_KEY_MARKET")
+                .unwrap_or_else(|_| "market:{id}".to_string()),
+            platform_stats: env::var("CONTRACT_KEY_PLATFORM_STATS")
+                .unwrap_or_else(|_| "platform:stats".to_string()),
+            user_bets: env::var("CONTRACT_KEY_USER_BETS")
+                .unwrap_or_else(|_| "user_bets:{id}".to_string()),
+            oracle_result: env::var("CONTRACT_KEY_ORACLE_RESULT")
+                .unwrap_or_else(|_| "oracle_result:{id}".to_string()),
+        }
+    }
+
+    pub fn market_key(&self, market_id: i64) -> String {
+        self.market.replace("{id}", &market_id.to_string())
+    }
+
+    pub fn user_bets_key(&self, user: &str) -> String {
+        self.user_bets.replace("{id}", user)
+    }
+
+    pub fn oracle_result_key(&self, market_id: i64) -> String {
+        self.oracle_result.replace("{id}", &market_id.to_string())
     }
 }
