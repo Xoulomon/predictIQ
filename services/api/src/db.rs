@@ -61,6 +61,10 @@ pub struct NewsletterSubscriber {
 }
 
 impl Database {
+    pub fn pool(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub async fn new(
         database_url: &str,
         cache: RedisCache,

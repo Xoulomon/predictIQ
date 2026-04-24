@@ -1,3 +1,5 @@
+mod audit;
+mod audit_middleware;
 mod blockchain;
 mod cache;
 mod config;
@@ -12,6 +14,7 @@ mod validation;
 
 use std::sync::Arc;
 
+use audit::AuditLogger;
 use axum::{
     middleware,
     routing::{get, post},
@@ -43,6 +46,7 @@ pub struct AppState {
     pub(crate) email_service: EmailService,
     pub(crate) email_queue: EmailQueue,
     pub(crate) webhook_handler: WebhookHandler,
+    pub(crate) audit_logger: AuditLogger,
 }
 
 #[tokio::main]
@@ -64,6 +68,9 @@ async fn main() -> anyhow::Result<()> {
     let email_service = EmailService::new(config.clone())?;
     let email_queue = EmailQueue::new(cache.clone(), db.clone());
     let webhook_handler = WebhookHandler::new(db.clone());
+    
+    // Initialize audit logger
+    let audit_logger = AuditLogger::new(db.pool());
 
     let bind_addr = config.bind_addr;
 
@@ -92,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         email_service: email_service.clone(),
         email_queue: email_queue.clone(),
         webhook_handler: webhook_handler.clone(),
+        audit_logger,
     });
 
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
@@ -211,7 +219,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(middleware::from_fn(security::security_headers_middleware))
         .with_state(state.clone());
 
-    // Admin routes (with API key auth, IP whitelist, and rate limiting)
+    // Admin routes (with API key auth, IP whitelist, rate limiting, and audit logging)
     let admin_routes = Router::new()
         .route(
             "/api/markets/:market_id/resolve",
@@ -233,6 +241,14 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/email/queue/stats",
             get(handlers::email_queue_stats),
         )
+        .route(
+            "/api/v1/audit/logs",
+            get(handlers::audit_logs),
+        )
+        .route(
+            "/api/v1/audit/statistics",
+            get(handlers::audit_statistics),
+        )
         .layer(middleware::from_fn_with_state(
             ip_whitelist.clone(),
             security::ip_whitelist_middleware,
@@ -244,6 +260,10 @@ async fn main() -> anyhow::Result<()> {
         .layer(middleware::from_fn_with_state(
             rate_limiter.clone(),
             rate_limit::admin_rate_limit_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            audit_middleware::audit_logging_middleware,
         ))
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());

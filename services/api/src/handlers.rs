@@ -816,3 +816,75 @@ pub async fn sendgrid_webhook(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     sendgrid_webhook_handler(State(Arc::new(state.webhook_handler.clone())), headers, Json(events)).await
 }
+
+/// Query audit logs with filters
+pub async fn audit_logs(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<AuditLogsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use chrono::{DateTime, Utc};
+    
+    let from = params.from.and_then(|s| s.parse::<DateTime<Utc>>().ok());
+    let to = params.to.and_then(|s| s.parse::<DateTime<Utc>>().ok());
+    let limit = params.limit.unwrap_or(100).min(1000);
+    let offset = params.offset.unwrap_or(0);
+    
+    let logs = state
+        .audit_logger
+        .query(
+            params.actor.as_deref(),
+            params.action.as_deref(),
+            params.resource_type.as_deref(),
+            from,
+            to,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(into_api_error)?;
+    
+    Ok((StatusCode::OK, Json(logs)))
+}
+
+/// Get audit log statistics
+pub async fn audit_statistics(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<AuditStatisticsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use chrono::{DateTime, Duration, Utc};
+    
+    let to = params
+        .to
+        .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+        .unwrap_or_else(Utc::now);
+    
+    let from = params
+        .from
+        .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+        .unwrap_or_else(|| to - Duration::days(30));
+    
+    let stats = state
+        .audit_logger
+        .statistics(from, to)
+        .await
+        .map_err(into_api_error)?;
+    
+    Ok((StatusCode::OK, Json(stats)))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct AuditLogsQuery {
+    pub actor: Option<String>,
+    pub action: Option<String>,
+    pub resource_type: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct AuditStatisticsQuery {
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
