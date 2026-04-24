@@ -75,6 +75,9 @@ pub struct Config {
     /// `metrics_public` is `true`).
     /// Configured via `METRICS_ALLOWLIST_IPS` (comma-separated).
     pub metrics_allowlist_ips: Vec<IpAddr>,
+    /// How long (in seconds) an idempotency key is retained in Redis.
+    /// Defaults to 86400 (24 hours). Set via `IDEMPOTENCY_WINDOW_SECS`.
+    pub idempotency_window_secs: u64,
 }
 
 impl Config {
@@ -227,6 +230,10 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            idempotency_window_secs: env::var("IDEMPOTENCY_WINDOW_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(86400),
         }
     }
 

@@ -2,7 +2,27 @@ openapi: 3.0.3
 info:
   title: PredictIQ API
   version: 1.0.0
-  description: REST API for the PredictIQ prediction markets platform
+  description: |
+    REST API for the PredictIQ prediction markets platform.
+
+    ## API Versioning
+
+    The API uses URL path versioning (`/api/v1/`). The current stable version is **v1**.
+
+    Clients may also send an `API-Version` header (e.g. `API-Version: v1`) to explicitly
+    declare the version they target. If omitted, the server defaults to the current version.
+
+    ## Deprecation Policy
+
+    When a version is deprecated:
+    - Responses will include a `Deprecation` header set to `true`.
+    - A `Sunset` header will indicate the date after which the version will be removed.
+    - A `Link` header will point to migration documentation.
+
+    Clients should monitor these headers and migrate before the sunset date.
+
+    Deprecated versions are supported for a minimum of **12 months** after the deprecation
+    announcement before being removed.
 
 servers:
   - url: http://localhost:8080
@@ -31,11 +51,13 @@ paths:
                 type: string
                 example: ok
 
-  /api/statistics:
+  /api/v1/statistics:
     get:
       tags: [markets]
       operationId: getStatistics
       summary: Platform statistics
+      parameters:
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Statistics payload
@@ -46,11 +68,13 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/markets/featured:
+  /api/v1/markets/featured:
     get:
       tags: [markets]
       operationId: getFeaturedMarkets
       summary: List featured markets
+      parameters:
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Array of featured markets
@@ -63,12 +87,13 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/content:
+  /api/v1/content:
     get:
       tags: [markets]
       operationId: getContent
       summary: Paginated content feed
       parameters:
+        - $ref: "#/components/parameters/apiVersion"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/pageSize"
       responses:
@@ -81,7 +106,7 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/markets/{market_id}/resolve:
+  /api/v1/markets/{market_id}/resolve:
     post:
       tags: [markets]
       operationId: resolveMarket
@@ -90,6 +115,7 @@ paths:
         - ApiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/marketId"
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Cache invalidation result
@@ -104,11 +130,13 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/health:
+  /api/v1/blockchain/health:
     get:
       tags: [blockchain]
       operationId: getBlockchainHealth
       summary: Blockchain node and contract health
+      parameters:
+        - $ref: "#/components/parameters/apiVersion"
       description: |
         Returns the health of the blockchain node and contract.
 
@@ -134,13 +162,14 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/markets/{market_id}:
+  /api/v1/blockchain/markets/{market_id}:
     get:
       tags: [blockchain]
       operationId: getBlockchainMarket
       summary: On-chain market data
       parameters:
         - $ref: "#/components/parameters/marketId"
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Market chain data
@@ -151,11 +180,13 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/stats:
+  /api/v1/blockchain/stats:
     get:
       tags: [blockchain]
       operationId: getBlockchainStats
       summary: Platform on-chain statistics
+      parameters:
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Platform stats
@@ -166,7 +197,7 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/users/{user}/bets:
+  /api/v1/blockchain/users/{user}/bets:
     get:
       tags: [blockchain]
       operationId: getUserBets
@@ -178,6 +209,7 @@ paths:
           schema:
             type: string
           description: Stellar address of the user
+        - $ref: "#/components/parameters/apiVersion"
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/pageSize"
       responses:
@@ -190,13 +222,14 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/oracle/{market_id}:
+  /api/v1/blockchain/oracle/{market_id}:
     get:
       tags: [blockchain]
       operationId: getOracleResult
       summary: Oracle result for a market
       parameters:
         - $ref: "#/components/parameters/marketId"
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Oracle result
@@ -207,7 +240,7 @@ paths:
         "500":
           $ref: "#/components/responses/ApiError"
 
-  /api/blockchain/tx/{tx_hash}:
+  /api/v1/blockchain/tx/{tx_hash}:
     get:
       tags: [blockchain]
       operationId: getTransactionStatus
@@ -218,6 +251,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/apiVersion"
       responses:
         "200":
           description: Transaction status
@@ -233,6 +267,9 @@ paths:
       tags: [newsletter]
       operationId: newsletterSubscribe
       summary: Subscribe to newsletter
+      parameters:
+        - $ref: "#/components/parameters/apiVersion"
+        - $ref: "#/components/parameters/idempotencyKey"
       requestBody:
         required: true
         content:
@@ -444,6 +481,28 @@ paths:
 
 components:
   parameters:
+    apiVersion:
+      name: API-Version
+      in: header
+      required: false
+      schema:
+        type: string
+        enum: [v1]
+        default: v1
+      description: |
+        Target API version. Defaults to the current stable version (`v1`).
+        Responses for deprecated versions include `Deprecation`, `Sunset`, and `Link` headers.
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+      description: |
+        Client-generated unique key (e.g. UUID v4) to deduplicate mutating requests.
+        If a request with the same key was processed within the idempotency window,
+        the cached response is returned immediately without re-executing the operation.
     marketId:
       name: market_id
       in: path
