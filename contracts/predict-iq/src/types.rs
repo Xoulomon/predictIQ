@@ -114,6 +114,8 @@ pub enum ConfigKey {
     PendingUpgrade,
     UpgradeVotes,
     TimelockDuration,
+    PendingGuardianRemoval,
+    UpgradeRejectedAt(soroban_sdk::BytesN<32>),
 }
 
 #[contracttype]
@@ -136,7 +138,7 @@ pub struct Guardian {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingUpgrade {
-    pub wasm_hash: String,
+    pub wasm_hash: soroban_sdk::BytesN<32>,
     pub initiated_at: u64,
     pub votes_for: Vec<Address>,
     pub votes_against: Vec<Address>,
@@ -147,14 +149,14 @@ pub const TIMELOCK_DURATION: u64 = 48 * 60 * 60; // 48 hours in seconds
 pub const TIMELOCK_MIN_SECONDS: u64 = 3600; // 1 hour minimum
 pub const TIMELOCK_MAX_SECONDS: u64 = 7 * 24 * 3600; // 7 days maximum
 pub const MAJORITY_THRESHOLD_PERCENT: u32 = 51; // 51% for majority
+pub const UPGRADE_COOLDOWN_DURATION: u64 = 7 * 24 * 3600; // 7 days cooldown for rejected upgrades
 
-// Governance stats and pending removal types
+// Governance stats type for vote counting
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UpgradeStats {
-    pub total_upgrades: u32,
-    pub last_upgrade_at: u64,
-    pub last_wasm_hash: String,
+pub struct UpgradeVoteStats {
+    pub votes_for: u32,
+    pub votes_against: u32,
 }
 
 #[contracttype]

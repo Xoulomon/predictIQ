@@ -231,11 +231,15 @@ impl PredictIQ {
         crate::modules::governance::remove_guardian(&e, address)
     }
 
+    pub fn vote_on_guardian_removal(e: Env, voter: Address, approve: bool) -> Result<(), ErrorCode> {
+        crate::modules::governance::vote_on_guardian_removal(&e, voter, approve)
+    }
+
     pub fn get_guardians(e: Env) -> Vec<crate::types::Guardian> {
         crate::modules::governance::get_guardians(&e)
     }
 
-    pub fn initiate_upgrade(e: Env, wasm_hash: String) -> Result<(), ErrorCode> {
+    pub fn initiate_upgrade(e: Env, wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), ErrorCode> {
         crate::modules::governance::initiate_upgrade(&e, wasm_hash)
     }
 
@@ -243,7 +247,7 @@ impl PredictIQ {
         crate::modules::governance::vote_for_upgrade(&e, voter, vote_for)
     }
 
-    pub fn execute_upgrade(e: Env) -> Result<String, ErrorCode> {
+    pub fn execute_upgrade(e: Env) -> Result<(), ErrorCode> {
         crate::modules::governance::execute_upgrade(&e)
     }
 
@@ -251,12 +255,20 @@ impl PredictIQ {
         crate::modules::governance::get_pending_upgrade(&e)
     }
 
-    pub fn get_upgrade_votes(e: Env) -> Result<(u32, u32), ErrorCode> {
+    pub fn get_upgrade_votes(e: Env) -> Result<crate::types::UpgradeVoteStats, ErrorCode> {
         crate::modules::governance::get_upgrade_votes(&e)
     }
 
     pub fn is_timelock_satisfied(e: Env) -> Result<bool, ErrorCode> {
         crate::modules::governance::is_timelock_satisfied(&e)
+    }
+
+    pub fn set_timelock_duration(e: Env, seconds: u64) -> Result<(), ErrorCode> {
+        crate::modules::governance::set_timelock_duration(&e, seconds)
+    }
+
+    pub fn get_timelock_duration(e: Env) -> u64 {
+        crate::modules::governance::get_timelock_duration(&e)
     }
 
     /// Prune (archive) a resolved market after 30 days grace period

@@ -47,4 +47,7 @@ pub enum ErrorCode {
     InsufficientVotingWeight = 140,
     MarketNotCancelled = 141,
     BetNotFound = 142,
+    UpgradeAlreadyPending = 143,
+    UpgradeHashInCooldown = 144,
+    InvalidAmount = 145,
 }
