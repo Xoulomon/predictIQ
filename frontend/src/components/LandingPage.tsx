@@ -8,6 +8,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
   const [email, setEmail] = React.useState('');
   const [emailError, setEmailError] = React.useState('');
   const [isSubmitted, setIsSubmitted] = React.useState(false);
+  const formStatusRef = React.useRef<HTMLDivElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +28,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
     setIsSubmitted(true);
     
     // Announce success to screen readers
-    const announcement = document.getElementById('form-status');
-    if (announcement) {
-      announcement.textContent = 'Successfully subscribed to updates!';
+    if (formStatusRef.current) {
+      formStatusRef.current.textContent = 'Successfully subscribed to updates!';
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Allow form submission with Enter key
+    if (e.key === 'Enter' && e.currentTarget.tagName === 'FORM') {
+      handleSubmit(e as unknown as React.FormEvent);
     }
   };
 
@@ -52,11 +59,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
                 height="50"
               />
             </div>
-            <ul className="nav-menu">
-              <li><a href="#features">Features</a></li>
-              <li><a href="#how-it-works">How It Works</a></li>
-              <li><a href="#about">About</a></li>
-              <li><a href="#contact">Contact</a></li>
+            <ul className="nav-menu" role="menubar">
+              <li role="none"><a href="#features" role="menuitem">Features</a></li>
+              <li role="none"><a href="#how-it-works" role="menuitem">How It Works</a></li>
+              <li role="none"><a href="#about" role="menuitem">About</a></li>
+              <li role="none"><a href="#contact" role="menuitem">Contact</a></li>
             </ul>
           </div>
         </nav>
@@ -76,7 +83,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
           
           {/* CTA Form */}
           <form 
-            onSubmit={handleSubmit} 
+            onSubmit={handleSubmit}
+            onKeyDown={handleKeyDown}
             aria-labelledby="signup-heading"
             noValidate
           >
@@ -120,6 +128,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ className }) => {
 
             {/* Screen reader announcement */}
             <div 
+              ref={formStatusRef}
               id="form-status" 
               role="status" 
               aria-live="polite" 
