@@ -23,6 +23,9 @@ pub fn attempt_oracle_resolution(e: &Env, market_id: u64) -> Result<(), ErrorCod
         return Err(ErrorCode::ResolutionNotReady);
     }
     
+    // Issue #508: Validate oracle staleness before resolution
+    oracles::validate_oracle_staleness(e, market_id, &market.oracle_config)?;
+    
     // Attempt oracle resolution
     if let Some(oracle_outcome) = oracles::get_oracle_result(e, market_id, &market.oracle_config) {
         let old_status = soroban_sdk::String::from_slice(e, "Active");

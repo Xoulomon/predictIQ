@@ -163,6 +163,13 @@ impl PredictIQ {
         crate::modules::oracles::set_oracle_result(&e, market_id, outcome)
     }
 
+    /// Issue #508: Validate oracle staleness for a market
+    pub fn validate_oracle_staleness(e: Env, market_id: u64) -> Result<(), ErrorCode> {
+        let market = crate::modules::markets::get_market(&e, market_id)
+            .ok_or(ErrorCode::MarketNotFound)?;
+        crate::modules::oracles::validate_oracle_staleness(&e, market_id, &market.oracle_config)
+    }
+
     pub fn resolve_market(e: Env, market_id: u64, winning_outcome: u32) -> Result<(), ErrorCode> {
         crate::modules::admin::require_admin(&e)?;
         crate::modules::disputes::resolve_market(&e, market_id, winning_outcome)
