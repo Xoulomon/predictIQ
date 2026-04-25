@@ -226,6 +226,26 @@ impl PredictIQ {
         crate::modules::markets::release_creation_deposit(&e, market_id, native_token)
     }
 
+    /// Issue #507: Set market creation fee (admin only)
+    pub fn set_creation_fee(e: Env, amount: i128) -> Result<(), ErrorCode> {
+        crate::modules::markets::set_creation_fee(&e, amount)
+    }
+
+    /// Issue #507: Get market creation fee
+    pub fn get_creation_fee(e: Env) -> i128 {
+        crate::modules::markets::get_creation_fee(&e)
+    }
+
+    /// Issue #507: Set protocol treasury address (admin only)
+    pub fn set_protocol_treasury(e: Env, treasury: Address) -> Result<(), ErrorCode> {
+        crate::modules::markets::set_protocol_treasury(&e, treasury)
+    }
+
+    /// Issue #507: Get protocol treasury address
+    pub fn get_protocol_treasury(e: Env) -> Address {
+        crate::modules::markets::get_protocol_treasury(&e)
+    }
+
     // Governance and Upgrade Functions
     pub fn initialize_guardians(
         e: Env,
