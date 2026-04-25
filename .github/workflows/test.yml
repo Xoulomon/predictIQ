@@ -606,6 +606,47 @@ jobs:
         run: cargo test --lib cache
         working-directory: services/api
 
+  e2e-market-creation:
+    name: E2E — Market Creation Flow
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run market-creation E2E tests
+        run: npx playwright test e2e/market-creation.spec.ts --project=chromium
+        env:
+          CI: "true"
+
+      - name: Run flaky test detection
+        run: npx playwright test e2e/market-creation.spec.ts --project=chromium
+        env:
+          CI: "true"
+          FLAKY_DETECTION: "true"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-market-creation-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
   all-tests-passed:
     name: All Tests Passed
     needs:
@@ -624,6 +665,7 @@ jobs:
       - format
       - build-optimized
       - api-cache-tests
+      - e2e-market-creation
     runs-on: ubuntu-latest
     steps:
       - name: Success
